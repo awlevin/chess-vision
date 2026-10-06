@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.vercel/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tsbuildinfo
+.vercel
+.env*.local
+
+# local agent tooling (symlinks into a private dotfiles repo)
+.claude/
+.agents/
+.private/
