@@ -14,12 +14,14 @@ next.
 | Find the square | A coordinate appears, and you click it |
 | Name the file or rank | A whole file or rank lights up, and you name it with one tap or key (`c`, `6`). A warm-up for naming full squares |
 | Name the square | A knight lands on a square, and you name it by tapping a file and then a rank, or typing them (e.g. `e` `4`) |
+| Follow the piece | A knight, bishop, rook or queen hops around the board one legal move at a time. You name each square it lands on. The square it left stays marked, so you learn the shape of its moves |
 
 Before each round, and on the round-end card, you choose:
 
 - **Play as** White or Black. Black flips the board. Each drill keeps separate stats
   for each side, because finding e4 from Black's side is a different skill from
   finding it from White's side.
+- **Piece** (Follow the piece only). Each piece keeps its own stats.
 - **Board labels**: file letters (a–h) along the bottom edge, rank numbers (1–8)
   along the left edge, both, or neither. Both are off by default.
 
@@ -32,6 +34,8 @@ This is the same adaptive picker as the sprints in
 [mental-math-trainer](https://github.com/awlevin/mental-math-trainer), applied to the
 64 squares instead of the 64 times-table facts. It lives in `lib/drill.ts`. The file and
 rank drill uses the same picker over 16 lines (8 files and 8 ranks) instead of 64 squares.
+Follow the piece draws only from the squares the piece can reach from where it is, and
+never hops straight back. A missed square comes back when the piece can next reach it.
 
 Each square keeps three numbers: how many times you've seen it, how many times you
 missed it, and an exponentially weighted average of your answer time

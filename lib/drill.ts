@@ -24,6 +24,33 @@ export const fileIndex = (sq: Square) => sq.charCodeAt(0) - 97; // a=0
 export const rankIndex = (sq: Square) => Number(sq[1]) - 1; // 1=0
 export const isDark = (sq: Square) => (fileIndex(sq) + rankIndex(sq)) % 2 === 0; // a1 is dark
 
+// ---- piece moves, on an otherwise empty board ----
+export type Piece = "knight" | "bishop" | "rook" | "queen";
+const DIAGONALS: [number, number][] = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+const STRAIGHTS: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const MOVES: Record<Piece, { deltas: [number, number][]; slides: boolean }> = {
+  knight: { deltas: [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]], slides: false },
+  bishop: { deltas: DIAGONALS, slides: true },
+  rook: { deltas: STRAIGHTS, slides: true },
+  queen: { deltas: [...DIAGONALS, ...STRAIGHTS], slides: true },
+};
+
+export function pieceMoves(piece: Piece, from: Square): Square[] {
+  const { deltas, slides } = MOVES[piece];
+  const out: Square[] = [];
+  for (const [df, dr] of deltas) {
+    let f = fileIndex(from) + df;
+    let r = rankIndex(from) + dr;
+    while (f >= 0 && f < 8 && r >= 0 && r < 8) {
+      out.push(`${FILES[f]}${r + 1}`);
+      if (!slides) break;
+      f += df;
+      r += dr;
+    }
+  }
+  return out;
+}
+
 // Rows top-to-bottom as seen from the given side.
 export function boardRows(orientation: Orientation): Square[][] {
   const ranks = orientation === "white" ? [...RANKS].reverse() : [...RANKS];
@@ -74,9 +101,10 @@ export function keyWeights(pool: string[], stats: StatMap): number[] {
   });
 }
 
-// Picks the next key from the pool. Due requeues win; otherwise a weighted
-// draw that avoids repeating the previous key. Mutates `retries` (removes the
-// one used).
+// Picks the next key from the pool, never `last` when another fits. A due
+// requeue wins if the pool holds it (a moving piece can only land where it
+// can reach); otherwise a weighted draw. Mutates `retries` (removes the one
+// used).
 export function pickNext(
   pool: string[],
   stats: StatMap,
@@ -84,7 +112,7 @@ export function pickNext(
   count: number,
   last: string | null,
 ): { key: string; review: boolean } {
-  const dueIdx = retries.findIndex((r) => r.due <= count);
+  const dueIdx = retries.findIndex((r) => r.due <= count && r.key !== last && pool.includes(r.key));
   if (dueIdx !== -1) {
     const key = retries[dueIdx].key;
     retries.splice(dueIdx, 1);
