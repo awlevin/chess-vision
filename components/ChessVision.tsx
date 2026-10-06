@@ -27,7 +27,6 @@ type HeatMetric = "seen" | "time" | "wrong";
 // Which edge labels the board shows: files (a–h) along the bottom, ranks
 // (1–8) up the left side.
 type Labels = { files: boolean; ranks: boolean };
-const NO_LABELS: Labels = { files: false, ranks: false };
 
 const now = () => performance.now();
 
@@ -36,6 +35,7 @@ function Board({
   orientation,
   labels,
   marks = {},
+  piece,
   onPick,
   dim,
   children,
@@ -43,6 +43,7 @@ function Board({
   orientation: Orientation;
   labels: Labels;
   marks?: Record<Square, string>;
+  piece?: Square;
   onPick?: (sq: Square) => void;
   dim?: boolean;
   children?: React.ReactNode;
@@ -63,6 +64,7 @@ function Board({
             >
               {labels.ranks && fi === 0 && <span className="crank">{sq[1]}</span>}
               {labels.files && ri === 7 && <span className="cfile">{sq[0]}</span>}
+              {piece === sq && <span className="piece" aria-hidden>{"\u265E\uFE0E"}</span>}
             </button>
           )),
         )}
@@ -76,7 +78,7 @@ function Board({
 const HEAT_COLORS: Record<HeatMetric, string> = { seen: "201,164,106", time: "214,138,62", wrong: "208,97,74" };
 
 function HeatBoard({ stats, orientation, noun }: { stats: StatMap; orientation: Orientation; noun: string }) {
-  const [metric, setMetric] = useState<HeatMetric>("seen");
+  const [metric, setMetric] = useState<HeatMetric>("time");
   const val = (sq: Square) => {
     const s = stats[sq];
     if (!s) return null;
@@ -96,7 +98,7 @@ function HeatBoard({ stats, orientation, noun }: { stats: StatMap; orientation: 
       <h3>Every {noun}, all time</h3>
       <div className="lifetime">{lifeSeen} answered · {lifeAcc}% right · {lifeAvg.toFixed(2)}s avg</div>
       <div className="metricchips">
-        {([["seen", "Attempts"], ["time", "Avg time"], ["wrong", "Misses"]] as const).map(([m, label]) => (
+        {([["time", "Avg time"], ["seen", "Attempts"], ["wrong", "Misses"]] as const).map(([m, label]) => (
           <button key={m} className={`mchip ${metric === m ? "active" : ""}`} onClick={() => setMetric(m)}>{label}</button>
         ))}
       </div>
@@ -133,7 +135,18 @@ function HeatBoard({ stats, orientation, noun }: { stats: StatMap; orientation: 
 }
 
 // ================= Timed drill =================
-function Drill({ active, config, labels }: { active: boolean; config: DrillConfig; labels: Labels }) {
+function Drill({
+  active,
+  config,
+  labels,
+  setup,
+}: {
+  active: boolean;
+  config: DrillConfig;
+  labels: Labels;
+  // Side and label controls, shown between rounds.
+  setup: React.ReactNode;
+}) {
   const { mode, orientation, storageKey } = config;
   const [square, setSquare] = useState<Square>("e4");
   const [phase, setPhase] = useState<Phase>("ready");
@@ -245,6 +258,8 @@ function Drill({ active, config, labels }: { active: boolean; config: DrillConfi
         else if (/^[1-8]$/.test(k)) pressRank(Number(k));
         else if (e.key === "Backspace") setNameFile(null);
       } else if (e.key === "Enter") {
+        // A focused button handles its own Enter.
+        if (e.target instanceof HTMLButtonElement) return;
         if (phase === "ready") newProblem();
         else if (phase === "wrongpause") resolvePending("wrong");
         else if (phase === "roundend") startNewRound();
@@ -332,6 +347,7 @@ function Drill({ active, config, labels }: { active: boolean; config: DrillConfi
               </div>
             </div>
           )}
+          {setup}
           <button className="primary" onClick={startNewRound}>Begin round {roundNo + 1}</button>
           <div className="hint">or press Enter</div>
         </div>
@@ -372,6 +388,7 @@ function Drill({ active, config, labels }: { active: boolean; config: DrillConfi
         orientation={orientation}
         labels={labels}
         marks={marks}
+        piece={mode === "name" && phase !== "ready" ? square : undefined}
         onPick={mode === "find" && phase === "solve" ? answer : undefined}
         dim={phase === "ready"}
       >
@@ -422,6 +439,7 @@ function Drill({ active, config, labels }: { active: boolean; config: DrillConfi
         </div>
       )}
 
+      {phase === "ready" && setup}
       {statsRow}
       {phase === "ready" && hasStats && (
         <div className="card statscard"><HeatBoard stats={stats} orientation={orientation} noun="square" /></div>
@@ -430,38 +448,101 @@ function Drill({ active, config, labels }: { active: boolean; config: DrillConfi
   );
 }
 
-// ================= Exercise registry =================
-const EXERCISES: { id: string; group: string; label: string; sub: string; config: DrillConfig }[] = [
-  { id: "find-white", group: "Find the square", label: "As White", sub: "A coordinate appears — click it", config: { mode: "find", orientation: "white", storageKey: "cv-find-white-v1" } },
-  { id: "find-black", group: "Find the square", label: "As Black", sub: "Same drill, board flipped", config: { mode: "find", orientation: "black", storageKey: "cv-find-black-v1" } },
-  { id: "name-white", group: "Name the square", label: "As White", sub: "A square lights up — name it", config: { mode: "name", orientation: "white", storageKey: "cv-name-white-v1" } },
-  { id: "name-black", group: "Name the square", label: "As Black", sub: "Same drill, board flipped", config: { mode: "name", orientation: "black", storageKey: "cv-name-black-v1" } },
+// ================= Drill registry =================
+const DRILLS: { mode: Mode; title: string; sub: string }[] = [
+  { mode: "find", title: "Find the square", sub: "A coordinate appears — click it" },
+  { mode: "name", title: "Name the square", sub: "A square lights up — name it" },
 ];
+const MODES = DRILLS.map((d) => d.mode);
+const SIDES: readonly Orientation[] = ["white", "black"];
+// Each mode and side keeps its own stats: finding e4 as Black is a different
+// skill from finding it as White.
+const CONFIGS: DrillConfig[] = MODES.flatMap((mode) =>
+  SIDES.map((orientation) => ({ mode, orientation, storageKey: `cv-${mode}-${orientation}-v1` })),
+);
+const LABEL_EDGES = [
+  { edge: "files", range: "a–h", name: "File letters" },
+  { edge: "ranks", range: "1–8", name: "Rank numbers" },
+] as const;
 
+type Prefs = { mode: Mode; side: Orientation; labels: Labels };
 const PREFS_KEY = "cv:prefs";
+const DEFAULT_PREFS: Prefs = { mode: "find", side: "white", labels: { files: false, ranks: false } };
+
+const oneOf = <T extends string>(v: unknown, options: readonly T[], fallback: T): T =>
+  (options as readonly unknown[]).includes(v) ? (v as T) : fallback;
+
+function loadPrefs(): Prefs {
+  try {
+    const p = JSON.parse(window.localStorage.getItem(PREFS_KEY) || "{}");
+    // Older prefs stored one activeId like "find-black", and one `coords`
+    // switch for both edges.
+    const [oldMode, oldSide] = typeof p.activeId === "string" ? p.activeId.split("-") : [];
+    return {
+      mode: oneOf(p.mode ?? oldMode, MODES, DEFAULT_PREFS.mode),
+      side: oneOf(p.side ?? oldSide, SIDES, DEFAULT_PREFS.side),
+      labels: { files: !!(p.labels?.files ?? p.coords), ranks: !!(p.labels?.ranks ?? p.coords) },
+    };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
+
+// Keeps a mouse click from leaving focus on a chip, so Enter still starts the
+// round afterwards.
+const noFocus = (e: React.MouseEvent) => e.preventDefault();
 
 // ================= App shell =================
 export default function ChessVision() {
-  const [prefs, setPrefs] = useState<{ activeId: string; labels: Labels }>(() => {
-    try {
-      const p = JSON.parse(window.localStorage.getItem(PREFS_KEY) || "{}");
-      return {
-        activeId: EXERCISES.some((e) => e.id === p.activeId) ? p.activeId : "find-white",
-        // Older prefs had one `coords` switch for both edges.
-        labels: { files: !!(p.labels?.files ?? p.coords), ranks: !!(p.labels?.ranks ?? p.coords) },
-      };
-    } catch {
-      return { activeId: "find-white", labels: NO_LABELS };
-    }
-  });
+  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const { activeId, labels } = prefs;
-  const activeEx = EXERCISES.find((e) => e.id === activeId)!;
-  const groups = [...new Set(EXERCISES.map((e) => e.group))];
+  const { mode, side, labels } = prefs;
+  const activeDrill = DRILLS.find((d) => d.mode === mode)!;
 
   useEffect(() => {
     try { window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* private mode */ }
   }, [prefs]);
+
+  const setup = (
+    <div className="setup">
+      <div className="sgroup">
+        <div className="slabel">Play as</div>
+        <div className="schips">
+          {SIDES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className={`mchip ${side === s ? "active" : ""}`}
+              aria-pressed={side === s}
+              onMouseDown={noFocus}
+              onClick={() => setPrefs((p) => ({ ...p, side: s }))}
+            >
+              <span className="sglyph">{s === "white" ? "♔" : "♚"}</span>{s === "white" ? "White" : "Black"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="sgroup">
+        <div className="slabel">Board labels</div>
+        <div className="schips">
+          {LABEL_EDGES.map(({ edge, range, name }) => (
+            <button
+              key={edge}
+              type="button"
+              className={`mchip ${labels[edge] ? "active" : ""}`}
+              aria-pressed={labels[edge]}
+              aria-label={name}
+              title={name}
+              onMouseDown={noFocus}
+              onClick={() => setPrefs((p) => ({ ...p, labels: { ...p.labels, [edge]: !p.labels[edge] } }))}
+            >
+              {range}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="root">
@@ -470,34 +551,16 @@ export default function ChessVision() {
       <div className={`scrim ${drawerOpen ? "open" : ""}`} onClick={() => setDrawerOpen(false)} />
       <nav className={`drawer ${drawerOpen ? "open" : ""}`}>
         <div className="dtitle"><span className="knight">♞</span> Chess Vision</div>
-        {groups.map((g) => (
-          <div key={g}>
-            <div className="dgroup">{g}</div>
-            {EXERCISES.filter((e) => e.group === g).map((e) => (
-              <button
-                key={e.id}
-                className={`ditem ${e.id === activeId ? "active" : ""}`}
-                onClick={() => { setPrefs((p) => ({ ...p, activeId: e.id })); setDrawerOpen(false); }}
-              >
-                <div className="dlabel">{e.label}</div>
-                <div className="dsub">{e.sub}</div>
-              </button>
-            ))}
-          </div>
+        {DRILLS.map((d) => (
+          <button
+            key={d.mode}
+            className={`ditem ${d.mode === mode ? "active" : ""}`}
+            onClick={() => { setPrefs((p) => ({ ...p, mode: d.mode })); setDrawerOpen(false); }}
+          >
+            <div className="dlabel">{d.title}</div>
+            <div className="dsub">{d.sub}</div>
+          </button>
         ))}
-        <div className="dgroup">Board</div>
-        {([["files", "File letters", "a–h"], ["ranks", "Rank numbers", "1–8"]] as const).map(([edge, name, range]) => (
-          <label key={edge} className="toggle">
-            <input
-              type="checkbox"
-              checked={labels[edge]}
-              onChange={(e) => setPrefs((p) => ({ ...p, labels: { ...p.labels, [edge]: e.target.checked } }))}
-            />
-            <span className="track"><span className="thumb" /></span>
-            <span>{name} <span className="trange">{range}</span></span>
-          </label>
-        ))}
-        <div className="dnote">Training wheels. Your times still count.</div>
       </nav>
 
       <div className="frame">
@@ -506,16 +569,19 @@ export default function ChessVision() {
             <span /><span /><span />
           </button>
           <div className="titleblock">
-            <div className="eyebrow">{activeEx.group}</div>
-            <h1>{activeEx.label}</h1>
+            <div className="eyebrow">As {side === "white" ? "White" : "Black"}</div>
+            <h1>{activeDrill.title}</h1>
           </div>
         </div>
 
-        {EXERCISES.map((e) => (
-          <div key={e.id} style={{ display: e.id === activeId ? "block" : "none" }}>
-            <Drill active={e.id === activeId} config={e.config} labels={labels} />
-          </div>
-        ))}
+        {CONFIGS.map((c) => {
+          const isActive = c.mode === mode && c.orientation === side;
+          return (
+            <div key={c.storageKey} style={{ display: isActive ? "block" : "none" }}>
+              <Drill active={isActive} config={c} labels={labels} setup={setup} />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -555,22 +621,12 @@ button { font-family: var(--sans); font-variant-numeric: lining-nums; font-featu
 @media (prefers-reduced-motion: reduce) { .drawer, .scrim { transition: none; } }
 .dtitle { font-family: var(--serif); font-size: 24px; font-weight: 600; margin: 0 0 10px 6px; }
 .knight { color: var(--brass); }
-.dgroup { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 600; color: var(--faint); margin: 18px 8px 6px; }
 .ditem { display: block; width: 100%; text-align: left; border: 1px solid transparent; background: none; padding: 10px 12px; border-radius: 10px; cursor: pointer; }
 .ditem .dlabel { font-size: 14px; font-weight: 600; color: var(--ivory); }
 .ditem .dsub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 .ditem.active { background: var(--panel2); border-color: var(--line2); }
 .ditem.active .dlabel { color: var(--brass); }
 .ditem:not(.active):hover { background: rgba(255,255,255,0.03); }
-.toggle { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; font-size: 14px; font-weight: 500; }
-.toggle input { position: absolute; opacity: 0; pointer-events: none; }
-.toggle .track { width: 36px; height: 20px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line2); position: relative; transition: background .15s; flex-shrink: 0; }
-.toggle .thumb { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
-.toggle input:checked + .track { background: rgba(201,164,106,0.25); }
-.toggle input:checked + .track .thumb { transform: translateX(16px); background: var(--brass); }
-.toggle input:focus-visible + .track { outline: 2px solid var(--brass); outline-offset: 2px; }
-.toggle .trange { color: var(--muted); font-family: var(--serif); font-style: italic; font-size: 15px; margin-left: 2px; }
-.dnote { font-size: 11.5px; color: var(--muted); padding: 0 12px; }
 
 .promptbar { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 12px; }
 .progress { flex: 1; min-width: 0; padding-bottom: 6px; }
@@ -600,9 +656,10 @@ button { font-family: var(--sans); font-variant-numeric: lining-nums; font-featu
 .sq .cfile { bottom: 3px; right: 4px; }
 .sq.lt .crank, .sq.lt .cfile { color: var(--dark); }
 .sq.dk .crank, .sq.dk .cfile { color: var(--light); }
-.sq.target { box-shadow: inset 0 0 0 4px #E2B65A; }
-.sq.target::before { content: ''; position: absolute; inset: 0; background: rgba(226,182,90,0.35); animation: glow 1.4s ease-in-out infinite; }
-@keyframes glow { 50% { opacity: 0.45; } }
+.sq.target { box-shadow: inset 0 0 0 4px #F0B43C; }
+.sq.target::before { content: ''; position: absolute; inset: 0; background: rgba(240,180,60,0.6); animation: glow 1.4s ease-in-out infinite; }
+@keyframes glow { 50% { opacity: 0.6; } }
+.sq .piece { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI Symbol', 'Apple Symbols', 'DejaVu Sans', serif; font-size: min(9vw, 44px); line-height: 1; color: #1A140D; text-shadow: 0 0 1px #F2EADB, 0 0 3px rgba(242,234,219,0.9), 0 2px 4px rgba(0,0,0,0.35); pointer-events: none; }
 .sq.good::before { content: ''; position: absolute; inset: 0; background: rgba(125,179,106,0.75); }
 .sq.answer::before { content: ''; position: absolute; inset: 0; background: rgba(125,179,106,0.75); box-shadow: inset 0 0 0 3px #4E7D3F; }
 .sq.bad::before { content: ''; position: absolute; inset: 0; background: rgba(208,97,74,0.8); }
@@ -665,6 +722,12 @@ button { font-family: var(--sans); font-variant-numeric: lining-nums; font-featu
 .histchip.best { background: rgba(125,179,106,0.16); color: var(--good); }
 
 .lifetime { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.setup { display: flex; gap: 14px; margin-top: 14px; }
+.roundend .setup { margin: 0 0 12px; }
+.sgroup { flex: 1; min-width: 0; }
+.slabel { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.schips { display: flex; gap: 6px; }
+.sglyph { font-family: 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', serif; font-size: 20px; line-height: 0; vertical-align: -3px; margin-right: 5px; }
 .metricchips { display: flex; gap: 6px; margin-bottom: 10px; }
 .mchip { flex: 1; padding: 7px 4px; border-radius: 7px; border: 1px solid var(--line2); background: transparent; font-size: 11.5px; font-weight: 600; color: var(--muted); cursor: pointer; }
 .mchip.active { background: var(--brass); color: var(--bg); border-color: var(--brass); }

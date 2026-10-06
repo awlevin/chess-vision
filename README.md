@@ -7,19 +7,20 @@ a square lights up and you name it, and every answer is timed to the hundredth o
 second. The app keeps per-square stats and uses them to decide which squares you see
 next.
 
-## The four drills
+## The drills
 
 | Drill | What it does |
 |---|---|
-| Find the square, as White | A coordinate appears, and you click it on a board seen from White's side |
-| Find the square, as Black | The same drill with the board flipped |
-| Name the square, as White | A square lights up, and you name it by tapping a file and then a rank, or typing them (e.g. `e` `4`) |
-| Name the square, as Black | The same drill with the board flipped |
+| Find the square | A coordinate appears, and you click it |
+| Name the square | A knight lands on a square, and you name it by tapping a file and then a rank, or typing them (e.g. `e` `4`) |
 
-Each drill keeps its own stats. Finding e4 from Black's side is a different skill from
-finding it from White's side. The menu has two switches for board labels: file letters
-(a–h) along the bottom edge and rank numbers (1–8) along the left edge. You can turn on
-one, both, or neither. Both are off by default.
+Before each round, and on the round-end card, you choose:
+
+- **Play as** White or Black. Black flips the board. Each drill keeps separate stats
+  for each side, because finding e4 from Black's side is a different skill from
+  finding it from White's side.
+- **Board labels**: file letters (a–h) along the bottom edge, rank numbers (1–8)
+  along the left edge, both, or neither. Both are off by default.
 
 A round is 20 squares. The clock starts when you press **Begin** or Enter, not when
 the page loads.
@@ -57,7 +58,7 @@ At the end of a round you see:
 - your three slowest correct squares
 - the squares getting extra reps next round
 - an 8x8 heat map drawn as the board itself, from the side you're drilling, which you
-  can switch between attempts, average time and misses
+  can switch between average time, attempts and misses
 - your past rounds, with the best one highlighted
 
 The heat map also shows under the board before each round.
