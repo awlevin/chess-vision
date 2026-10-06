@@ -24,20 +24,24 @@ type Attempt = { sq: Square; correct: boolean; time: number; given: Square | nul
 type RoundSummary = { avg: number; acc: number; total: number };
 type Phase = "ready" | "solve" | "flash" | "wrongpause" | "roundend";
 type HeatMetric = "seen" | "time" | "wrong";
+// Which edge labels the board shows: files (a–h) along the bottom, ranks
+// (1–8) up the left side.
+type Labels = { files: boolean; ranks: boolean };
+const NO_LABELS: Labels = { files: false, ranks: false };
 
 const now = () => performance.now();
 
 // ================= Board =================
 function Board({
   orientation,
-  coords,
+  labels,
   marks = {},
   onPick,
   dim,
   children,
 }: {
   orientation: Orientation;
-  coords: boolean;
+  labels: Labels;
   marks?: Record<Square, string>;
   onPick?: (sq: Square) => void;
   dim?: boolean;
@@ -57,8 +61,8 @@ function Board({
               className={`sq ${isDark(sq) ? "dk" : "lt"} ${marks[sq] || ""}`}
               onPointerDown={onPick ? (e) => { e.preventDefault(); onPick(sq); } : undefined}
             >
-              {coords && fi === 0 && <span className="crank">{sq[1]}</span>}
-              {coords && ri === 7 && <span className="cfile">{sq[0]}</span>}
+              {labels.ranks && fi === 0 && <span className="crank">{sq[1]}</span>}
+              {labels.files && ri === 7 && <span className="cfile">{sq[0]}</span>}
             </button>
           )),
         )}
@@ -129,7 +133,7 @@ function HeatBoard({ stats, orientation, noun }: { stats: StatMap; orientation: 
 }
 
 // ================= Timed drill =================
-function Drill({ active, config, coords }: { active: boolean; config: DrillConfig; coords: boolean }) {
+function Drill({ active, config, labels }: { active: boolean; config: DrillConfig; labels: Labels }) {
   const { mode, orientation, storageKey } = config;
   const [square, setSquare] = useState<Square>("e4");
   const [phase, setPhase] = useState<Phase>("ready");
@@ -366,7 +370,7 @@ function Drill({ active, config, coords }: { active: boolean; config: DrillConfi
 
       <Board
         orientation={orientation}
-        coords={coords}
+        labels={labels}
         marks={marks}
         onPick={mode === "find" && phase === "solve" ? answer : undefined}
         dim={phase === "ready"}
@@ -438,16 +442,20 @@ const PREFS_KEY = "cv:prefs";
 
 // ================= App shell =================
 export default function ChessVision() {
-  const [prefs, setPrefs] = useState<{ activeId: string; coords: boolean }>(() => {
+  const [prefs, setPrefs] = useState<{ activeId: string; labels: Labels }>(() => {
     try {
       const p = JSON.parse(window.localStorage.getItem(PREFS_KEY) || "{}");
-      return { activeId: EXERCISES.some((e) => e.id === p.activeId) ? p.activeId : "find-white", coords: !!p.coords };
+      return {
+        activeId: EXERCISES.some((e) => e.id === p.activeId) ? p.activeId : "find-white",
+        // Older prefs had one `coords` switch for both edges.
+        labels: { files: !!(p.labels?.files ?? p.coords), ranks: !!(p.labels?.ranks ?? p.coords) },
+      };
     } catch {
-      return { activeId: "find-white", coords: false };
+      return { activeId: "find-white", labels: NO_LABELS };
     }
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const { activeId, coords } = prefs;
+  const { activeId, labels } = prefs;
   const activeEx = EXERCISES.find((e) => e.id === activeId)!;
   const groups = [...new Set(EXERCISES.map((e) => e.group))];
 
@@ -478,11 +486,17 @@ export default function ChessVision() {
           </div>
         ))}
         <div className="dgroup">Board</div>
-        <label className="toggle">
-          <input type="checkbox" checked={coords} onChange={(e) => setPrefs((p) => ({ ...p, coords: e.target.checked }))} />
-          <span className="track"><span className="thumb" /></span>
-          <span>Show coordinates</span>
-        </label>
+        {([["files", "File letters", "a–h"], ["ranks", "Rank numbers", "1–8"]] as const).map(([edge, name, range]) => (
+          <label key={edge} className="toggle">
+            <input
+              type="checkbox"
+              checked={labels[edge]}
+              onChange={(e) => setPrefs((p) => ({ ...p, labels: { ...p.labels, [edge]: e.target.checked } }))}
+            />
+            <span className="track"><span className="thumb" /></span>
+            <span>{name} <span className="trange">{range}</span></span>
+          </label>
+        ))}
         <div className="dnote">Training wheels. Your times still count.</div>
       </nav>
 
@@ -499,7 +513,7 @@ export default function ChessVision() {
 
         {EXERCISES.map((e) => (
           <div key={e.id} style={{ display: e.id === activeId ? "block" : "none" }}>
-            <Drill active={e.id === activeId} config={e.config} coords={coords} />
+            <Drill active={e.id === activeId} config={e.config} labels={labels} />
           </div>
         ))}
       </div>
@@ -555,6 +569,7 @@ button { font-family: var(--sans); font-variant-numeric: lining-nums; font-featu
 .toggle input:checked + .track { background: rgba(201,164,106,0.25); }
 .toggle input:checked + .track .thumb { transform: translateX(16px); background: var(--brass); }
 .toggle input:focus-visible + .track { outline: 2px solid var(--brass); outline-offset: 2px; }
+.toggle .trange { color: var(--muted); font-family: var(--serif); font-style: italic; font-size: 15px; margin-left: 2px; }
 .dnote { font-size: 11.5px; color: var(--muted); padding: 0 12px; }
 
 .promptbar { display: flex; align-items: flex-end; gap: 14px; margin-bottom: 12px; }

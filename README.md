@@ -17,8 +17,9 @@ next.
 | Name the square, as Black | The same drill with the board flipped |
 
 Each drill keeps its own stats. Finding e4 from Black's side is a different skill from
-finding it from White's side. Coordinates can be shown on the board from the menu, but
-they are off by default.
+finding it from White's side. The menu has two switches for board labels: file letters
+(a–h) along the bottom edge and rank numbers (1–8) along the left edge. You can turn on
+one, both, or neither. Both are off by default.
 
 A round is 20 squares. The clock starts when you press **Begin** or Enter, not when
 the page loads.
