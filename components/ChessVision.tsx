@@ -8,10 +8,12 @@ import {
   isDark,
   lineSquares,
   pickNext,
+  pieceMoves,
   recordAttempt,
   scheduleRetries,
   weakSpots,
   type Orientation,
+  type Piece,
   type Retry,
   type Square,
   type StatMap,
@@ -21,8 +23,9 @@ const ROUND_LEN = 20;
 const SLOW_FLOOR = 2; // seconds; a correct answer slower than this (and 1.6x the round avg) is requeued
 const FLASH_MS = 280;
 
-type Mode = "find" | "line" | "name";
-type DrillConfig = { mode: Mode; orientation: Orientation; storageKey: string };
+type Mode = "find" | "line" | "name" | "tour";
+// `piece` is set only for the tour drill, which keeps stats per piece.
+type DrillConfig = { mode: Mode; orientation: Orientation; piece: Piece | null; storageKey: string };
 type Attempt = { sq: Square; correct: boolean; time: number; given: Square | null };
 type RoundSummary = { avg: number; acc: number; total: number };
 type Phase = "ready" | "solve" | "flash" | "wrongpause" | "roundend";
@@ -38,8 +41,21 @@ const DRILLS: { mode: Mode; title: string; sub: string; units: string; task: str
   { mode: "find", title: "Find the square", sub: "A coordinate appears — click it", units: "squares", task: "named for you to click", prompt: "Tap the square" },
   { mode: "line", title: "Name the file or rank", sub: "A file or rank lights up — name it", units: "files and ranks", task: "highlighted for you to name", prompt: "Name the highlighted file or rank" },
   { mode: "name", title: "Name the square", sub: "A knight lands on a square — name it", units: "squares", task: "marked for you to name", prompt: "Name the knight's square" },
+  { mode: "tour", title: "Follow the piece", sub: "A piece hops around — name where it lands", units: "moves", task: "each landing square for you to name", prompt: "Name the square it landed on" },
 ];
 const drillFor = (mode: Mode) => DRILLS.find((d) => d.mode === mode)!;
+
+const PIECES: { piece: Piece; name: string; glyph: string }[] = [
+  { piece: "knight", name: "Knight", glyph: "♞" },
+  { piece: "bishop", name: "Bishop", glyph: "♝" },
+  { piece: "rook", name: "Rook", glyph: "♜" },
+  { piece: "queen", name: "Queen", glyph: "♛" },
+];
+const pieceFor = (piece: Piece) => PIECES.find((p) => p.piece === piece)!;
+const titleFor = (mode: Mode, piece: Piece | null) =>
+  mode === "tour" && piece ? `Follow the ${pieceFor(piece).name.toLowerCase()}` : drillFor(mode).title;
+// The text variation selector keeps the glyphs from rendering as emoji.
+const TEXT = "\uFE0E";
 
 // ================= Board =================
 function Board({
@@ -54,12 +70,14 @@ function Board({
   orientation: Orientation;
   labels: Labels;
   marks?: Record<Square, string>;
-  piece?: Square;
+  // `slide` animates the piece from its last square to this one.
+  piece?: { sq: Square; glyph: string; slide: boolean };
   onPick?: (sq: Square) => void;
   dim?: boolean;
   children?: React.ReactNode;
 }) {
   const rows = boardRows(orientation);
+  const pieceAt = piece ? rows.flat().indexOf(piece.sq) : -1;
   return (
     <div className={`boardwrap ${dim ? "dim" : ""}`}>
       <div className={`board ${onPick ? "pickable" : ""}`}>
@@ -75,9 +93,17 @@ function Board({
             >
               {labels.ranks && fi === 0 && <span className="crank">{sq[1]}</span>}
               {labels.files && ri === 7 && <span className="cfile">{sq[0]}</span>}
-              {piece === sq && <span className="piece" aria-hidden>{"\u265E\uFE0E"}</span>}
             </button>
           )),
+        )}
+        {piece && (
+          <span
+            className={`piece ${piece.slide ? "slide" : ""}`}
+            style={{ left: `${(pieceAt % 8) * 12.5}%`, top: `${Math.floor(pieceAt / 8) * 12.5}%` }}
+            aria-hidden
+          >
+            {piece.glyph + TEXT}
+          </span>
         )}
       </div>
       {children && <div className="overlay">{children}</div>}
@@ -173,8 +199,9 @@ function Drill({
   // Side and label controls, shown between rounds.
   setup: React.ReactNode;
 }) {
-  const { mode, orientation, storageKey } = config;
+  const { mode, orientation, piece, storageKey } = config;
   const drill = drillFor(mode);
+  const named = mode === "name" || mode === "tour"; // answered with a file, then a rank
   const [square, setSquare] = useState<Square>("e4");
   const [phase, setPhase] = useState<Phase>("ready");
   const [flash, setFlash] = useState<{ correct: boolean; time: number } | null>(null);
@@ -189,6 +216,9 @@ function Drill({
   const retryRef = useRef<Retry[]>([]);
   const countRef = useRef(0);
   const lastKeyRef = useRef<Square | null>(null);
+  // Tour only: the square the piece just left, and the one before it.
+  const [from, setFrom] = useState<Square | null>(null);
+  const prevKeyRef = useRef<Square | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const loadedRef = useRef(false);
 
@@ -220,8 +250,15 @@ function Drill({
   }, [phase, history]);
 
   const newProblem = () => {
-    const { key: next, review } = pickNext(mode === "line" ? ALL_LINES : ALL_SQUARES, stats, retryRef.current, countRef.current, lastKeyRef.current);
+    // On a tour the piece moves from where it is, and avoids hopping straight
+    // back; elsewhere the draw only avoids repeating the last key.
+    const at = mode === "tour" ? lastKeyRef.current : null;
+    const pool = mode === "line" ? ALL_LINES : at ? pieceMoves(piece!, at) : ALL_SQUARES;
+    const avoid = mode === "tour" ? prevKeyRef.current : lastKeyRef.current;
+    const { key: next, review } = pickNext(pool, stats, retryRef.current, countRef.current, avoid);
+    prevKeyRef.current = at;
     lastKeyRef.current = next;
+    setFrom(at);
     countRef.current += 1;
     setSquare(next);
     setIsReview(review);
@@ -324,6 +361,7 @@ function Drill({
   const mark = (key: string, cls: string) => {
     for (const sq of mode === "line" ? lineSquares(key) : [key]) marks[sq] = cls;
   };
+  if (mode === "tour" && from && (phase === "solve" || phase === "flash")) marks[from] = "from";
   if (mode !== "find" && (phase === "solve" || phase === "flash")) mark(square, mode === "line" ? "line" : "target");
   if (phase === "flash" && flash?.correct) mark(square, "good");
   if (phase === "wrongpause" && pending) { mark(pending.given, "bad"); mark(square, "answer"); }
@@ -429,14 +467,14 @@ function Drill({
         orientation={orientation}
         labels={labels}
         marks={marks}
-        piece={mode === "name" && phase !== "ready" ? square : undefined}
+        piece={named && phase !== "ready" ? { sq: square, glyph: pieceFor(piece ?? "knight").glyph, slide: mode === "tour" } : undefined}
         onPick={mode === "find" && phase === "solve" ? answer : undefined}
         dim={phase === "ready"}
       >
         {phase === "ready" && (
           <div className="readycard">
             <div className="eyebrow center">Round {roundNo}</div>
-            <h2>{drill.title}</h2>
+            <h2>{titleFor(mode, piece)}</h2>
             <p>
               {ROUND_LEN} {drill.units} from {orientation === "white" ? "White's" : "Black's"} side, {drill.task}. The
               clock starts when you do.
@@ -474,7 +512,7 @@ function Drill({
           </div>
           <div className="padrow">
             {RANKS.map((r) => (
-              <button key={r} className="key" disabled={phase !== "solve" || (mode === "name" && !nameFile)} onClick={() => pressRank(r)}>{r}</button>
+              <button key={r} className="key" disabled={phase !== "solve" || (named && !nameFile)} onClick={() => pressRank(r)}>{r}</button>
             ))}
           </div>
         </div>
@@ -495,16 +533,23 @@ const SIDES: readonly Orientation[] = ["white", "black"];
 // Each mode and side keeps its own stats: finding e4 as Black is a different
 // skill from finding it as White.
 const CONFIGS: DrillConfig[] = MODES.flatMap((mode) =>
-  SIDES.map((orientation) => ({ mode, orientation, storageKey: `cv-${mode}-${orientation}-v1` })),
+  (mode === "tour" ? PIECES.map((p) => p.piece) : [null]).flatMap((piece) =>
+    SIDES.map((orientation) => ({
+      mode,
+      orientation,
+      piece,
+      storageKey: `cv-${mode}${piece ? `-${piece}` : ""}-${orientation}-v1`,
+    })),
+  ),
 );
 const LABEL_EDGES = [
   { edge: "files", range: "a–h", name: "File letters" },
   { edge: "ranks", range: "1–8", name: "Rank numbers" },
 ] as const;
 
-type Prefs = { mode: Mode; side: Orientation; labels: Labels };
+type Prefs = { mode: Mode; side: Orientation; piece: Piece; labels: Labels };
 const PREFS_KEY = "cv:prefs";
-const DEFAULT_PREFS: Prefs = { mode: "find", side: "white", labels: { files: false, ranks: false } };
+const DEFAULT_PREFS: Prefs = { mode: "find", side: "white", piece: "knight", labels: { files: false, ranks: false } };
 
 const oneOf = <T extends string>(v: unknown, options: readonly T[], fallback: T): T =>
   (options as readonly unknown[]).includes(v) ? (v as T) : fallback;
@@ -518,6 +563,7 @@ function loadPrefs(): Prefs {
     return {
       mode: oneOf(p.mode ?? oldMode, MODES, DEFAULT_PREFS.mode),
       side: oneOf(p.side ?? oldSide, SIDES, DEFAULT_PREFS.side),
+      piece: oneOf(p.piece, PIECES.map((x) => x.piece), DEFAULT_PREFS.piece),
       labels: { files: !!(p.labels?.files ?? p.coords), ranks: !!(p.labels?.ranks ?? p.coords) },
     };
   } catch {
@@ -533,8 +579,13 @@ const noFocus = (e: React.MouseEvent) => e.preventDefault();
 export default function ChessVision() {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const { mode, side, labels } = prefs;
-  const activeDrill = drillFor(mode);
+  const { mode, side, piece, labels } = prefs;
+  const isActive = (c: DrillConfig) => c.mode === mode && c.orientation === side && (c.piece === null || c.piece === piece);
+  // Drills mount the first time they are opened, so each loads its stats only
+  // when needed, then stay mounted to keep a round in progress.
+  const activeKey = CONFIGS.find(isActive)!.storageKey;
+  const [opened, setOpened] = useState<string[]>([]);
+  if (!opened.includes(activeKey)) setOpened([...opened, activeKey]);
 
   useEffect(() => {
     try { window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* private mode */ }
@@ -542,6 +593,25 @@ export default function ChessVision() {
 
   const setup = (
     <div className="setup">
+      {mode === "tour" && (
+        <div className="sgroup full">
+          <div className="slabel">Piece</div>
+          <div className="schips">
+            {PIECES.map((x) => (
+              <button
+                key={x.piece}
+                type="button"
+                className={`mchip ${piece === x.piece ? "active" : ""}`}
+                aria-pressed={piece === x.piece}
+                onMouseDown={noFocus}
+                onClick={() => setPrefs((p) => ({ ...p, piece: x.piece }))}
+              >
+                <span className="sglyph">{x.glyph + TEXT}</span>{x.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="sgroup">
         <div className="slabel">Play as</div>
         <div className="schips">
@@ -607,18 +677,15 @@ export default function ChessVision() {
           </button>
           <div className="titleblock">
             <div className="eyebrow">As {side === "white" ? "White" : "Black"}</div>
-            <h1>{activeDrill.title}</h1>
+            <h1>{titleFor(mode, piece)}</h1>
           </div>
         </div>
 
-        {CONFIGS.map((c) => {
-          const isActive = c.mode === mode && c.orientation === side;
-          return (
-            <div key={c.storageKey} style={{ display: isActive ? "block" : "none" }}>
-              <Drill active={isActive} config={c} labels={labels} setup={setup} />
-            </div>
-          );
-        })}
+        {CONFIGS.filter((c) => opened.includes(c.storageKey)).map((c) => (
+          <div key={c.storageKey} style={{ display: isActive(c) ? "block" : "none" }}>
+            <Drill active={isActive(c)} config={c} labels={labels} setup={setup} />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -682,7 +749,7 @@ button { font-family: var(--sans); font-variant-numeric: lining-nums; font-featu
 .plaque.bad { border-color: var(--bad); }
 
 .boardwrap { position: relative; padding: 8px; border-radius: 6px; background: linear-gradient(145deg, #3A2C1F, #241B13); box-shadow: 0 0 0 1px var(--line2), 0 18px 40px rgba(0,0,0,0.45); }
-.board { display: grid; grid-template-columns: repeat(8, 1fr); aspect-ratio: 1; width: 100%; border-radius: 2px; overflow: hidden; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.board { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); aspect-ratio: 1; width: 100%; border-radius: 2px; overflow: hidden; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 .sq { position: relative; border: none; padding: 0; aspect-ratio: 1; display: block; cursor: default; font: inherit; }
 .board.pickable .sq { cursor: pointer; }
 .sq.lt { background: var(--light); }
@@ -696,8 +763,12 @@ button { font-family: var(--sans); font-variant-numeric: lining-nums; font-featu
 .sq.target { box-shadow: inset 0 0 0 4px #F0B43C; }
 .sq.target::before { content: ''; position: absolute; inset: 0; background: rgba(240,180,60,0.6); animation: glow 1.4s ease-in-out infinite; }
 @keyframes glow { 50% { opacity: 0.6; } }
-.sq .piece { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI Symbol', 'Apple Symbols', 'DejaVu Sans', serif; font-size: min(9vw, 44px); line-height: 1; color: #1A140D; text-shadow: 0 0 1px #F2EADB, 0 0 3px rgba(242,234,219,0.9), 0 2px 4px rgba(0,0,0,0.35); pointer-events: none; }
 .sq.line::before { content: ''; position: absolute; inset: 0; background: rgba(236,160,40,0.88); animation: glow 1.4s ease-in-out infinite; }
+.sq.from { box-shadow: inset 0 0 0 3px rgba(240,180,60,0.7); }
+.sq.from::before { content: ''; position: absolute; inset: 0; background: rgba(240,180,60,0.22); }
+.piece { position: absolute; width: 12.5%; height: 12.5%; z-index: 1; display: flex; align-items: center; justify-content: center; font-family: 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', serif; font-size: min(9vw, 44px); line-height: 1; color: #1A140D; text-shadow: 0 0 1px #F2EADB, 0 0 3px rgba(242,234,219,0.9), 0 2px 4px rgba(0,0,0,0.35); pointer-events: none; }
+.piece.slide { transition: left .2s ease, top .2s ease; }
+@media (prefers-reduced-motion: reduce) { .piece.slide { transition: none; } }
 .sq.good::before { content: ''; position: absolute; inset: 0; background: rgba(125,179,106,0.75); }
 .sq.answer::before { content: ''; position: absolute; inset: 0; background: rgba(125,179,106,0.75); box-shadow: inset 0 0 0 3px #4E7D3F; }
 .sq.bad::before { content: ''; position: absolute; inset: 0; background: rgba(208,97,74,0.8); }
@@ -760,9 +831,10 @@ button { font-family: var(--sans); font-variant-numeric: lining-nums; font-featu
 .histchip.best { background: rgba(125,179,106,0.16); color: var(--good); }
 
 .lifetime { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 8px; }
-.setup { display: flex; gap: 14px; margin-top: 14px; }
+.setup { display: flex; flex-wrap: wrap; gap: 12px 14px; margin-top: 14px; }
 .roundend .setup { margin: 0 0 12px; }
 .sgroup { flex: 1; min-width: 0; }
+.sgroup.full { flex-basis: 100%; }
 .slabel { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 .schips { display: flex; gap: 6px; }
 .sglyph { font-family: 'Apple Symbols', 'Segoe UI Symbol', 'DejaVu Sans', serif; font-size: 20px; line-height: 0; vertical-align: -3px; margin-right: 5px; }
