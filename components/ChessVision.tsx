@@ -1,10 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ALL_LINES,
+  ALL_SQUARES,
   FILES,
   RANKS,
   boardRows,
   isDark,
-  pickSquare,
+  lineSquares,
+  pickNext,
   recordAttempt,
   scheduleRetries,
   weakSpots,
@@ -18,7 +21,7 @@ const ROUND_LEN = 20;
 const SLOW_FLOOR = 2; // seconds; a correct answer slower than this (and 1.6x the round avg) is requeued
 const FLASH_MS = 280;
 
-type Mode = "find" | "name";
+type Mode = "find" | "line" | "name";
 type DrillConfig = { mode: Mode; orientation: Orientation; storageKey: string };
 type Attempt = { sq: Square; correct: boolean; time: number; given: Square | null };
 type RoundSummary = { avg: number; acc: number; total: number };
@@ -29,6 +32,14 @@ type HeatMetric = "seen" | "time" | "wrong";
 type Labels = { files: boolean; ranks: boolean };
 
 const now = () => performance.now();
+
+// ================= Drill registry =================
+const DRILLS: { mode: Mode; title: string; sub: string; units: string; task: string; prompt: string }[] = [
+  { mode: "find", title: "Find the square", sub: "A coordinate appears — click it", units: "squares", task: "named for you to click", prompt: "Tap the square" },
+  { mode: "line", title: "Name the file or rank", sub: "A file or rank lights up — name it", units: "files and ranks", task: "highlighted for you to name", prompt: "Name the highlighted file or rank" },
+  { mode: "name", title: "Name the square", sub: "A knight lands on a square — name it", units: "squares", task: "marked for you to name", prompt: "Name the knight's square" },
+];
+const drillFor = (mode: Mode) => DRILLS.find((d) => d.mode === mode)!;
 
 // ================= Board =================
 function Board({
@@ -77,58 +88,73 @@ function Board({
 // ================= Heat board =================
 const HEAT_COLORS: Record<HeatMetric, string> = { seen: "201,164,106", time: "214,138,62", wrong: "208,97,74" };
 
-function HeatBoard({ stats, orientation, noun }: { stats: StatMap; orientation: Orientation; noun: string }) {
+function HeatBoard({ stats, orientation, mode }: { stats: StatMap; orientation: Orientation; mode: Mode }) {
   const [metric, setMetric] = useState<HeatMetric>("time");
-  const val = (sq: Square) => {
-    const s = stats[sq];
+  const lines = mode === "line";
+  const noun = lines ? "file or rank" : "square";
+  const val = (k: string) => {
+    const s = stats[k];
     if (!s) return null;
     return metric === "seen" ? s.seen : metric === "wrong" ? s.wrong : s.ewma;
   };
   const rows = boardRows(orientation);
-  const max = Math.max(0.001, ...rows.flat().map((sq) => val(sq) || 0));
+  const max = Math.max(0.001, ...(lines ? ALL_LINES : ALL_SQUARES).map((k) => val(k) || 0));
   const all = Object.values(stats);
   const lifeSeen = all.reduce((s, x) => s + x.seen, 0);
   const lifeWrong = all.reduce((s, x) => s + x.wrong, 0);
   const lifeAcc = lifeSeen ? Math.round(((lifeSeen - lifeWrong) / lifeSeen) * 100) : 0;
   const lifeAvg = lifeSeen ? all.reduce((s, x) => s + (x.ewma || 0) * x.seen, 0) / lifeSeen : 0;
-  const files = orientation === "white" ? FILES : [...FILES].reverse();
+  const files = orientation === "white" ? [...FILES] : [...FILES].reverse();
+  const ranks = (orientation === "white" ? [...RANKS] : [...RANKS].reverse()).map(String);
+  const cell = (k: string, shade: "lt" | "dk") => {
+    const v = val(k);
+    const alpha = v == null ? 0 : Math.max(0.12, v / max);
+    return (
+      <div
+        key={k}
+        className={`hcell ${shade}`}
+        title={k}
+        style={v == null ? undefined : { background: `rgba(${HEAT_COLORS[metric]},${alpha.toFixed(2)})`, color: alpha > 0.55 ? "#15120F" : "#F2EADB" }}
+      >
+        {v == null ? "·" : metric === "time" ? v.toFixed(1) : v}
+      </div>
+    );
+  };
 
   return (
     <div className="section">
-      <h3>Every {noun}, all time</h3>
+      <h3>Every {lines ? "file and rank" : "square"}, all time</h3>
       <div className="lifetime">{lifeSeen} answered · {lifeAcc}% right · {lifeAvg.toFixed(2)}s avg</div>
       <div className="metricchips">
         {([["time", "Avg time"], ["seen", "Attempts"], ["wrong", "Misses"]] as const).map(([m, label]) => (
           <button key={m} className={`mchip ${metric === m ? "active" : ""}`} onClick={() => setMetric(m)}>{label}</button>
         ))}
       </div>
-      <div className="heat">
-        {rows.map((row) => (
-          <React.Fragment key={row[0]}>
-            <div className="hhead">{row[0][1]}</div>
-            {row.map((sq) => {
-              const v = val(sq);
-              const alpha = v == null ? 0 : Math.max(0.12, v / max);
-              return (
-                <div
-                  key={sq}
-                  className={`hcell ${isDark(sq) ? "dk" : "lt"}`}
-                  title={sq}
-                  style={v == null ? undefined : { background: `rgba(${HEAT_COLORS[metric]},${alpha.toFixed(2)})`, color: alpha > 0.55 ? "#15120F" : "#F2EADB" }}
-                >
-                  {v == null ? "·" : metric === "time" ? v.toFixed(1) : v}
-                </div>
-              );
-            })}
-          </React.Fragment>
-        ))}
-        <div />
-        {files.map((f) => <div key={f} className="hhead">{f}</div>)}
-      </div>
+      {lines ? (
+        <div className="heatlines">
+          {[files, ranks].map((keys) => (
+            <div key={keys[0]} className="heat strip">
+              {keys.map((k) => cell(k, "lt"))}
+              {keys.map((k) => <div key={k} className="hhead">{k}</div>)}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="heat">
+          {rows.map((row) => (
+            <React.Fragment key={row[0]}>
+              <div className="hhead">{row[0][1]}</div>
+              {row.map((sq) => cell(sq, isDark(sq) ? "dk" : "lt"))}
+            </React.Fragment>
+          ))}
+          <div />
+          {files.map((f) => <div key={f} className="hhead">{f}</div>)}
+        </div>
+      )}
       <div className="heatcaption">
-        {metric === "seen" && "Times each square has come up, from this side of the board. Brighter = more reps."}
-        {metric === "time" && "Recent average seconds per square. Brighter = slower."}
-        {metric === "wrong" && "Total misses per square. Brighter = missed more."}
+        {metric === "seen" && `Times each ${noun} has come up, from this side of the board. Brighter = more reps.`}
+        {metric === "time" && `Recent average seconds per ${noun}. Brighter = slower.`}
+        {metric === "wrong" && `Total misses per ${noun}. Brighter = missed more.`}
       </div>
     </div>
   );
@@ -148,6 +174,7 @@ function Drill({
   setup: React.ReactNode;
 }) {
   const { mode, orientation, storageKey } = config;
+  const drill = drillFor(mode);
   const [square, setSquare] = useState<Square>("e4");
   const [phase, setPhase] = useState<Phase>("ready");
   const [flash, setFlash] = useState<{ correct: boolean; time: number } | null>(null);
@@ -193,7 +220,7 @@ function Drill({
   }, [phase, history]);
 
   const newProblem = () => {
-    const { square: next, review } = pickSquare(stats, retryRef.current, countRef.current, lastKeyRef.current);
+    const { key: next, review } = pickNext(mode === "line" ? ALL_LINES : ALL_SQUARES, stats, retryRef.current, countRef.current, lastKeyRef.current);
     lastKeyRef.current = next;
     countRef.current += 1;
     setSquare(next);
@@ -245,14 +272,23 @@ function Drill({
     newProblem();
   };
 
-  // Name mode input: a file, then a rank. The second key submits.
-  const pressFile = (f: string) => { if (phase === "solve") setNameFile(f); };
-  const pressRank = (r: number) => { if (phase === "solve" && nameFile) answer(`${nameFile}${r}`); };
+  // Name mode input: a file, then a rank; the second key submits. Line mode
+  // submits on the first key.
+  const pressFile = (f: string) => {
+    if (phase !== "solve") return;
+    if (mode === "line") answer(f);
+    else setNameFile(f);
+  };
+  const pressRank = (r: number) => {
+    if (phase !== "solve") return;
+    if (mode === "line") answer(String(r));
+    else if (nameFile) answer(`${nameFile}${r}`);
+  };
 
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
-      if (phase === "solve" && mode === "name") {
+      if (phase === "solve" && mode !== "find") {
         const k = e.key.toLowerCase();
         if (/^[a-h]$/.test(k)) pressFile(k);
         else if (/^[1-8]$/.test(k)) pressRank(Number(k));
@@ -285,9 +321,12 @@ function Drill({
   const verb = mode === "find" ? "clicked" : "named";
 
   const marks: Record<Square, string> = {};
-  if (mode === "name" && (phase === "solve" || phase === "flash")) marks[square] = "target";
-  if (phase === "flash" && flash?.correct) marks[square] = "good";
-  if (phase === "wrongpause" && pending) { marks[pending.given] = "bad"; marks[square] = "answer"; }
+  const mark = (key: string, cls: string) => {
+    for (const sq of mode === "line" ? lineSquares(key) : [key]) marks[sq] = cls;
+  };
+  if (mode !== "find" && (phase === "solve" || phase === "flash")) mark(square, mode === "line" ? "line" : "target");
+  if (phase === "flash" && flash?.correct) mark(square, "good");
+  if (phase === "wrongpause" && pending) { mark(pending.given, "bad"); mark(square, "answer"); }
 
   const statsRow = (
     <div className="stats">
@@ -336,7 +375,7 @@ function Drill({
               ))}
             </div>
           )}
-          <HeatBoard stats={stats} orientation={orientation} noun="square" />
+          <HeatBoard stats={stats} orientation={orientation} mode={mode} />
           {history.length > 0 && (
             <div className="section">
               <h3>Past rounds (avg / square)</h3>
@@ -376,6 +415,8 @@ function Drill({
             <span className="glyph">{orientation === "white" ? "♔" : "♚"}</span>
           ) : mode === "find" ? (
             <span className="coord">{square}</span>
+          ) : phase === "solve" && mode === "line" ? (
+            <span className="coord"><span className="blank">_</span></span>
           ) : phase === "solve" ? (
             <span className="coord">{nameFile ?? <span className="blank">_</span>}<span className="blank">_</span></span>
           ) : (
@@ -395,10 +436,10 @@ function Drill({
         {phase === "ready" && (
           <div className="readycard">
             <div className="eyebrow center">Round {roundNo}</div>
-            <h2>{mode === "find" ? "Find the square" : "Name the square"}</h2>
+            <h2>{drill.title}</h2>
             <p>
-              {ROUND_LEN} squares from {orientation === "white" ? "White's" : "Black's"} side,{" "}
-              {mode === "find" ? "named for you to click" : "highlighted for you to name"}. The clock starts when you do.
+              {ROUND_LEN} {drill.units} from {orientation === "white" ? "White's" : "Black's"} side, {drill.task}. The
+              clock starts when you do.
             </p>
             <button className="primary" onClick={newProblem}>Begin</button>
             <div className="hint">or press Enter</div>
@@ -419,12 +460,12 @@ function Drill({
           <div className="fbline good">{flash.time.toFixed(2)}s</div>
         ) : (
           <div className="fbline muted">
-            {phase === "ready" ? "" : mode === "find" ? "Tap the square" : "Name the highlighted square"}
+            {phase === "ready" ? "" : drill.prompt}
           </div>
         )}
       </div>
 
-      {mode === "name" && phase !== "wrongpause" && (
+      {mode !== "find" && phase !== "wrongpause" && (
         <div className="namepad">
           <div className="padrow">
             {FILES.map((f) => (
@@ -433,7 +474,7 @@ function Drill({
           </div>
           <div className="padrow">
             {RANKS.map((r) => (
-              <button key={r} className="key" disabled={phase !== "solve" || !nameFile} onClick={() => pressRank(r)}>{r}</button>
+              <button key={r} className="key" disabled={phase !== "solve" || (mode === "name" && !nameFile)} onClick={() => pressRank(r)}>{r}</button>
             ))}
           </div>
         </div>
@@ -442,17 +483,13 @@ function Drill({
       {phase === "ready" && setup}
       {statsRow}
       {phase === "ready" && hasStats && (
-        <div className="card statscard"><HeatBoard stats={stats} orientation={orientation} noun="square" /></div>
+        <div className="card statscard"><HeatBoard stats={stats} orientation={orientation} mode={mode} /></div>
       )}
     </>
   );
 }
 
-// ================= Drill registry =================
-const DRILLS: { mode: Mode; title: string; sub: string }[] = [
-  { mode: "find", title: "Find the square", sub: "A coordinate appears — click it" },
-  { mode: "name", title: "Name the square", sub: "A square lights up — name it" },
-];
+// ================= Drill instances and prefs =================
 const MODES = DRILLS.map((d) => d.mode);
 const SIDES: readonly Orientation[] = ["white", "black"];
 // Each mode and side keeps its own stats: finding e4 as Black is a different
@@ -497,7 +534,7 @@ export default function ChessVision() {
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { mode, side, labels } = prefs;
-  const activeDrill = DRILLS.find((d) => d.mode === mode)!;
+  const activeDrill = drillFor(mode);
 
   useEffect(() => {
     try { window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* private mode */ }
@@ -660,10 +697,11 @@ button { font-family: var(--sans); font-variant-numeric: lining-nums; font-featu
 .sq.target::before { content: ''; position: absolute; inset: 0; background: rgba(240,180,60,0.6); animation: glow 1.4s ease-in-out infinite; }
 @keyframes glow { 50% { opacity: 0.6; } }
 .sq .piece { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI Symbol', 'Apple Symbols', 'DejaVu Sans', serif; font-size: min(9vw, 44px); line-height: 1; color: #1A140D; text-shadow: 0 0 1px #F2EADB, 0 0 3px rgba(242,234,219,0.9), 0 2px 4px rgba(0,0,0,0.35); pointer-events: none; }
+.sq.line::before { content: ''; position: absolute; inset: 0; background: rgba(236,160,40,0.88); animation: glow 1.4s ease-in-out infinite; }
 .sq.good::before { content: ''; position: absolute; inset: 0; background: rgba(125,179,106,0.75); }
 .sq.answer::before { content: ''; position: absolute; inset: 0; background: rgba(125,179,106,0.75); box-shadow: inset 0 0 0 3px #4E7D3F; }
 .sq.bad::before { content: ''; position: absolute; inset: 0; background: rgba(208,97,74,0.8); }
-@media (prefers-reduced-motion: reduce) { .sq.target::before { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .sq.target::before, .sq.line::before { animation: none; } }
 .boardwrap.dim .board { filter: brightness(0.42) saturate(0.7); }
 .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .readycard { text-align: center; max-width: 300px; }
@@ -732,6 +770,8 @@ button { font-family: var(--sans); font-variant-numeric: lining-nums; font-featu
 .mchip { flex: 1; padding: 7px 4px; border-radius: 7px; border: 1px solid var(--line2); background: transparent; font-size: 11.5px; font-weight: 600; color: var(--muted); cursor: pointer; }
 .mchip.active { background: var(--brass); color: var(--bg); border-color: var(--brass); }
 .heat { display: grid; grid-template-columns: 16px repeat(8, 1fr); gap: 2px; }
+.heatlines { display: flex; flex-direction: column; gap: 10px; }
+.heat.strip { grid-template-columns: repeat(8, 1fr); }
 .hcell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 10px; font-weight: 600; border-radius: 3px; color: var(--faint); min-width: 0; }
 .hcell.lt { background: #2E2820; }
 .hcell.dk { background: #221D17; }

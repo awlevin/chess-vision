@@ -12,6 +12,7 @@ next.
 | Drill | What it does |
 |---|---|
 | Find the square | A coordinate appears, and you click it |
+| Name the file or rank | A whole file or rank lights up, and you name it with one tap or key (`c`, `6`). A warm-up for naming full squares |
 | Name the square | A knight lands on a square, and you name it by tapping a file and then a rank, or typing them (e.g. `e` `4`) |
 
 Before each round, and on the round-end card, you choose:
@@ -29,7 +30,8 @@ the page loads.
 
 This is the same adaptive picker as the sprints in
 [mental-math-trainer](https://github.com/awlevin/mental-math-trainer), applied to the
-64 squares instead of the 64 times-table facts. It lives in `lib/drill.ts`.
+64 squares instead of the 64 times-table facts. It lives in `lib/drill.ts`. The file and
+rank drill uses the same picker over 16 lines (8 files and 8 ranks) instead of 64 squares.
 
 Each square keeps three numbers: how many times you've seen it, how many times you
 missed it, and an exponentially weighted average of your answer time

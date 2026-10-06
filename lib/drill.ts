@@ -1,8 +1,9 @@
-// Square geometry plus the adaptive picker and per-square stats.
+// Board geometry plus the adaptive picker and per-key stats.
 //
 // The picker, stats update and requeue rules are a straight port of the
 // Sprint drill in mental-math-trainer (components/MentalMathTrainer.jsx),
-// with the 64 ordered times-table facts swapped for the 64 board squares.
+// with the 64 ordered times-table facts swapped for a pool of keys: the 64
+// squares, or the 16 lines (8 files and 8 ranks).
 
 export const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 export const RANKS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
@@ -12,6 +13,12 @@ export type Orientation = "white" | "black";
 
 export const ALL_SQUARES: Square[] = [];
 for (const f of FILES) for (const r of RANKS) ALL_SQUARES.push(`${f}${r}`);
+
+// A file ("e") or a rank ("4"). Files are letters and ranks are digits, so
+// a key's length tells a line from a square.
+export type Line = string;
+export const ALL_LINES: Line[] = [...FILES, ...RANKS.map(String)];
+export const lineSquares = (line: Line): Square[] => ALL_SQUARES.filter((sq) => sq[0] === line || sq[1] === line);
 
 export const fileIndex = (sq: Square) => sq.charCodeAt(0) - 97; // a=0
 export const rankIndex = (sq: Square) => Number(sq[1]) - 1; // 1=0
@@ -48,13 +55,13 @@ export function globalEwma(stats: StatMap): number | null {
   return es.length ? es.reduce((s, x) => s + x, 0) / es.length : null;
 }
 
-// Weighted-sample weight per square: misses, slowness vs. your global
-// average, and under-coverage all push a square up; unseen squares start high.
-export function squareWeights(stats: StatMap): number[] {
+// Weighted-sample weight per key in the pool: misses, slowness vs. your
+// global average, and under-coverage all push a key up; unseen keys start high.
+export function keyWeights(pool: string[], stats: StatMap): number[] {
   const avg = globalEwma(stats);
-  const seens = ALL_SQUARES.map((k) => stats[k]?.seen || 0);
+  const seens = pool.map((k) => stats[k]?.seen || 0);
   const maxSeen = Math.max(...seens);
-  return ALL_SQUARES.map((k, i) => {
+  return pool.map((k, i) => {
     const s = stats[k];
     let w: number;
     if (!s) w = 3 + maxSeen * 0.5;
@@ -67,23 +74,25 @@ export function squareWeights(stats: StatMap): number[] {
   });
 }
 
-// Picks the next square. Due requeues win; otherwise a weighted draw that
-// avoids repeating the previous square. Mutates `retries` (removes the one used).
-export function pickSquare(
+// Picks the next key from the pool. Due requeues win; otherwise a weighted
+// draw that avoids repeating the previous key. Mutates `retries` (removes the
+// one used).
+export function pickNext(
+  pool: string[],
   stats: StatMap,
   retries: Retry[],
   count: number,
-  last: Square | null,
-): { square: Square; review: boolean } {
+  last: string | null,
+): { key: string; review: boolean } {
   const dueIdx = retries.findIndex((r) => r.due <= count);
   if (dueIdx !== -1) {
-    const square = retries[dueIdx].key;
+    const key = retries[dueIdx].key;
     retries.splice(dueIdx, 1);
-    return { square, review: true };
+    return { key, review: true };
   }
-  const weights = squareWeights(stats);
+  const weights = keyWeights(pool, stats);
   const total = weights.reduce((s, x) => s + x, 0);
-  let square = ALL_SQUARES[0];
+  let key = pool[0];
   for (let tries = 0; tries < 4; tries++) {
     let r = Math.random() * total;
     let idx = 0;
@@ -91,11 +100,11 @@ export function pickSquare(
       r -= weights[idx];
       if (r <= 0) break;
     }
-    square = ALL_SQUARES[idx];
-    if (square !== last) break;
+    key = pool[idx];
+    if (key !== last) break;
   }
-  const s = stats[square];
-  return { square, review: !!s && s.seen > 0 && s.wrong / s.seen > 0.25 };
+  const s = stats[key];
+  return { key, review: !!s && s.seen > 0 && s.wrong / s.seen > 0.25 };
 }
 
 // Miss → back twice (2–4 and 7–10 picks later). Correct but slow (over 1.6x
