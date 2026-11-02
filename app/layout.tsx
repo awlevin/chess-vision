@@ -1,14 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider, UserButton } from "@clerk/nextjs";
 import { CLOUD } from "@/lib/cloud";
+import { APP_NAME, APP_TAGLINE } from "@/lib/site";
+import AppNav from "@/components/AppNav";
 import "./globals.css";
 
-const TITLE = "Chess Vision";
-const DESCRIPTION =
-  "Timed board-vision drills: find and name every square, with adaptive repetition on the ones you miss.";
+const TITLE = APP_NAME;
+const DESCRIPTION = APP_TAGLINE;
 
 export const metadata: Metadata = {
-  title: TITLE,
+  title: { default: TITLE, template: `%s · ${TITLE}` },
   description: DESCRIPTION,
   appleWebApp: {
     capable: true,
@@ -34,20 +35,8 @@ export default function RootLayout({
   const body = (
     <html lang="en">
       <body>
-        {CLOUD && (
-          // All routes are protected in cloud mode, so a user is always
-          // signed in here.
-          <div
-            style={{
-              position: "fixed",
-              top: "calc(env(safe-area-inset-top, 0px) + 16px)",
-              right: 16,
-              zIndex: 100,
-            }}
-          >
-            <UserButton />
-          </div>
-        )}
+        {/* All routes are protected in cloud mode, so a user is always signed in here. */}
+        <AppNav user={CLOUD ? <UserButton /> : undefined} />
         {children}
       </body>
     </html>
