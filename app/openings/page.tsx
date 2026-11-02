@@ -1,12 +1,8 @@
 import type { Metadata } from "next";
+import Report from "@/components/openings/Report";
 
 export const metadata: Metadata = { title: "Openings" };
 
 export default function OpeningsPage() {
-  return (
-    <main className="page">
-      <h1>Openings</h1>
-      <p className="lede">Coming soon.</p>
-    </main>
-  );
+  return <Report />;
 }
