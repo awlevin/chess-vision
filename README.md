@@ -14,6 +14,10 @@ Features that analyse your play all read the same imported games through one
 contract (`useGames()` in `lib/games`). [Your Chess.com games](#your-chesscom-games)
 explains how they get there.
 
+The home page (`/`) greets you by your Chess.com name with your game count, and
+points to Vision and Openings. On a phone the sections sit in a bottom tab bar; on
+a desktop, in a slim bar at the top. The design language is in `DESIGN.md`.
+
 ## Vision drills
 
 Inspired by chess.com's Vision trainer. You get a coordinate and click the square, or
@@ -263,9 +267,11 @@ import { Chessboard } from "@/components/board";
 
 On `/account` you link a Chess.com username. The app checks it against the
 profile endpoint, so an unknown name gets a clear error, and then it imports the
-player's games. The page shows the import's progress. When it finishes, the page
-shows the avatar and name, the game count by time class, the date range, when the
-games were last synced, and **Refresh** and **Unlink** buttons.
+player's games while a knight hops along the progress bar ("Importing month 3 of
+25"). When it finishes, the page shows the avatar and name, the game count as one
+big number with a chip per time class, when the games were last synced, and a round
+**Refresh** button. **Unlink** sits behind the "⋯" (Account options) sheet and asks
+once before forgetting the account.
 
 ### Ownership verification (not built)
 
@@ -370,15 +376,20 @@ on raw Chess.com JSON.
 | Component | Use |
 |---|---|
 | `<GamesGate linkTitle? linkMessage?>` | Wrap a feature. Shows loading, a link prompt, the first import's progress, an import error with **Try again**, or "No games yet" until there are games, then renders its children |
-| `<LinkAccountPrompt title? headingLevel?>` | The "Link your Chess.com account" card with a link to `/account`. Its children are the body text |
-| `<SyncStatus showRefresh?>` | One line: "1,527 games from Hikaru · synced 5 minutes ago · Refresh", the import's progress, or the last error with **Retry** |
-| `<SyncProgress sync>` | A labelled progress bar for a running import |
+| `<LinkAccountPrompt title? headingLevel?>` | The knight, a title, one line (its children) and a **Link Chess.com account** button to `/account` |
+| `<SyncStatus showRefresh?>` | One line: "1,527 games · synced 5 minutes ago" with a round refresh button, the import's progress, or the last error with **Retry** |
+| `<SyncProgress sync>` | The knight hopping along a running import's progress, labelled "Importing month 3 of 25" |
+| `<RefreshButton onClick syncing?>` | A round refresh icon button (named "Refresh") that spins and disables while syncing |
+| `<CountUp value>` | A number that counts up to `value` and lands on it exactly (instant under reduced motion) |
 
 ## How it's built
 
-- **Next.js 16 App Router.** `app/layout.tsx` renders the section nav (`components/AppNav.tsx`)
+- **Next.js 16 App Router.** `app/layout.tsx` loads the fonts with `next/font`, renders the
+  section nav (`components/AppNav.tsx`: a bottom tab bar on phones, a top bar from 768px)
   and `components/AppProviders.tsx`, which installs `window.storage` and the games store
-  for every page. Shared design tokens are in `app/globals.css`.
+  for every page. Design tokens are in `app/design-tokens.css` (see `DESIGN.md`); the
+  shell and shared primitives (`.page`, `.rise` stagger, `.sr-only`) are in `app/globals.css`.
+  Pages pad their bottom by `--chrome-bottom` (the tab bar plus the safe area) via `body`.
 - `lib/site.ts` holds the app name and sections.
 - `lib/games` holds the games contract (`types.ts`), the Chess.com normalizer, the API
   client, the IndexedDB cache and the sync store.
