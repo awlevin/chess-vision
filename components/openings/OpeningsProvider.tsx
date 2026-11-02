@@ -7,6 +7,7 @@ import { createContext, useContext, useDeferredValue, useEffect, useMemo, useSta
 import { useGames, type Game, type LinkedAccount } from "@/lib/games";
 import { loadBook, type Book } from "@/lib/openings/book";
 import { parseGames, type ParsedGame } from "@/lib/openings/parse";
+import { buildReport, type Report } from "@/lib/openings/report";
 import { applyFilters, DEFAULT_FILTERS, isFilters, type Filters } from "@/lib/openings/stats";
 import { STORAGE_KEYS, usePersistent } from "@/lib/openings/persist";
 
@@ -24,6 +25,8 @@ export interface OpeningsData {
   games: ParsedGame[];
   filters: Filters;
   setFilters: (f: Filters) => void;
+  /** The report over the filtered games, once the book is in. */
+  report: Report | null;
 }
 
 const Ctx = createContext<OpeningsData | null>(null);
@@ -65,6 +68,7 @@ export function OpeningsProvider({ children }: { children: ReactNode }) {
   // Filtering re-runs the report; let the controls update first.
   const deferredFilters = useDeferredValue(filters);
   const filtered = useMemo(() => applyFilters(all, deferredFilters), [all, deferredFilters]);
+  const report = useMemo(() => (book ? buildReport(filtered, book) : null), [filtered, book]);
 
   let status: OpeningsStatus;
   if (!ready) status = "loading";
@@ -74,8 +78,8 @@ export function OpeningsProvider({ children }: { children: ReactNode }) {
   else status = "ready";
 
   const value = useMemo<OpeningsData>(
-    () => ({ status, account, progress, book, all, games: filtered, filters, setFilters }),
-    [status, account, progress, book, all, filtered, filters, setFilters],
+    () => ({ status, account, progress, book, all, games: filtered, filters, setFilters, report }),
+    [status, account, progress, book, all, filtered, filters, setFilters, report],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

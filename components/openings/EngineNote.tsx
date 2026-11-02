@@ -5,23 +5,13 @@ import type { Color } from "@/lib/games";
 import { cloudEval, formatEval, povScore, uciToSan, type CloudEval } from "@/lib/openings/engine";
 import { moveLabel } from "@/lib/openings/format";
 import { STORAGE_KEYS, usePersistent } from "@/lib/openings/persist";
-import { styles as s } from "./ui";
+import s from "./openings.module.css";
 
 const isBool = (v: unknown): v is boolean => typeof v === "boolean";
 
-/** Whether the report asks the Lichess cloud engine about positions. Off by default: it sends positions to lichess.org. */
+/** Whether leaks are checked with the Lichess cloud engine. Off by default: it sends positions to lichess.org. */
 export function useEngineSetting() {
   return usePersistent(STORAGE_KEYS.engine, false, isBool);
-}
-
-export function EngineToggle() {
-  const [on, setOn] = useEngineSetting();
-  return (
-    <label className={s.check}>
-      <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} />
-      Check with the Lichess cloud engine
-    </label>
-  );
 }
 
 /** The engine's view of one of your moves, with a way to drill its choice instead. */
@@ -63,7 +53,7 @@ export function EngineNote(props: {
             : `; your ${yours} isn't in its top ${ev.pvs.length}.`}
       </span>
       {worse && onAdopt && (
-        <button type="button" className={`${s.btn} ${s.small}`} onClick={() => onAdopt({ uci: best.uci, san: bestSan })}>
+        <button type="button" className={s.textBtn} onClick={() => onAdopt({ uci: best.uci, san: bestSan })}>
           {`Drill ${moveLabel(bestSan, ply)} instead`}
         </button>
       )}

@@ -233,3 +233,14 @@ export function leakCards(rep: Repertoire, states: CardStates, baseline: number,
     .slice(0, max)
     .map((x) => x.c);
 }
+
+/**
+ * For drilling one line: true for the position the line reaches and for
+ * positions whose usual path starts with it. `sans` is SAN from the start.
+ */
+export function onLine(sans: string[]): (card: Card) => boolean {
+  const pos = FastPosition.start();
+  for (const san of sans) if (!pos.play(san)) break;
+  const end = pos.key();
+  return (card) => card.key === end || (card.line.length >= sans.length && sans.every((m, i) => card.line[i] === m));
+}

@@ -108,3 +108,14 @@ export function deepestNamed(book: Book, keys: string[], upTo = keys.length - 1)
   for (let i = Math.min(upTo, keys.length - 1); i >= 1; i--) if (book.named.has(keys[i])) return i;
   return -1;
 }
+
+/** The deepest named opening along a SAN line from the start, or null. */
+export function nameOfLine(book: Book, sans: string[]): BookEntry | null {
+  const pos = FastPosition.start();
+  let found: BookEntry | null = null;
+  for (const san of sans) {
+    if (!pos.play(san)) break;
+    found = book.named.get(pos.key()) ?? found;
+  }
+  return found;
+}
