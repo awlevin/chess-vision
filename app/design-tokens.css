@@ -37,9 +37,10 @@
   --sq-hl: rgba(232, 201, 143, 0.55);      /* last move, selection */
 
   /* ---- Type ---- */
-  --font-display: 'Cormorant Garamond', Georgia, serif;
-  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-num: 'Inter', system-ui, sans-serif; /* with tabular-nums */
+  /* --font-cormorant and --font-inter are set by next/font in app/layout.tsx. */
+  --font-display: var(--font-cormorant, 'Cormorant Garamond'), Georgia, serif;
+  --font-ui: var(--font-inter, 'Inter'), system-ui, -apple-system, sans-serif;
+  --font-num: var(--font-inter, 'Inter'), system-ui, sans-serif; /* with tabular-nums */
   /* Scale (px): display 48 · title 30 · heading 22 · body 16 · small 14 · caption 12 */
   --t-display: 48px; --t-title: 30px; --t-heading: 22px; --t-body: 16px; --t-small: 14px; --t-caption: 12px;
 
