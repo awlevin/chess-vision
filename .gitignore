@@ -13,3 +13,7 @@ node_modules/
 .claude/
 .agents/
 .private/
+
+# Playwright
+/test-results/
+/playwright-report/

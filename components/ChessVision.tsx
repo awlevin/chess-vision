@@ -657,7 +657,7 @@ export default function ChessVision() {
 
       <div className={`scrim ${drawerOpen ? "open" : ""}`} onClick={() => setDrawerOpen(false)} />
       <nav className={`drawer ${drawerOpen ? "open" : ""}`}>
-        <div className="dtitle"><span className="knight">♞</span> Chess Vision</div>
+        <div className="dtitle"><span className="knight">♞</span> Vision</div>
         {DRILLS.map((d) => (
           <button
             key={d.mode}
@@ -699,7 +699,7 @@ const CSS = `
   --ivory: #F2EADB; --muted: #A3957F; --faint: #6F6455; --brass: #C9A46A; --brassdeep: #9C7A45;
   --light: #EAD7B0; --dark: #A87A52; --good: #7DB36A; --bad: #D0614A;
   --serif: 'Cormorant Garamond', Georgia, serif; font-variant-numeric: lining-nums; font-feature-settings: 'lnum' 1; --sans: 'Inter', system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace;
-  min-height: 100vh; font-family: var(--sans); color: var(--ivory);
+  min-height: calc(100vh - 56px); font-family: var(--sans); color: var(--ivory);
   background:
     radial-gradient(ellipse 90% 60% at 50% -10%, rgba(201,164,106,0.10), transparent 70%),
     repeating-conic-gradient(rgba(255,255,255,0.012) 0 25%, transparent 0 50%) 0 0 / 56px 56px,
@@ -710,7 +710,7 @@ const CSS = `
 .frame { width: 100%; max-width: 460px; }
 button { font-family: var(--sans); font-variant-numeric: lining-nums; font-feature-settings: 'lnum' 1; }
 
-.topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-right: 48px; }
+.topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .burger { width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--line2); background: var(--panel); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0; }
 .burger span { display: block; width: 17px; height: 1.5px; background: var(--brass); border-radius: 1px; }
 .titleblock { min-width: 0; }
