@@ -19,7 +19,8 @@ explains how they get there.
 Inspired by chess.com's Vision trainer. You get a coordinate and click the square, or
 a square lights up and you name it, and every answer is timed to the hundredth of a
 second. The app keeps per-square stats and uses them to decide which squares you see
-next. The drills live in `components/ChessVision.tsx` and `lib/drill.ts`.
+next. The mechanics live in `lib/drill.ts`; the screen is `components/ChessVision.tsx`
+plus the pieces in `components/vision/`.
 
 ### The drills
 
@@ -30,7 +31,8 @@ next. The drills live in `components/ChessVision.tsx` and `lib/drill.ts`.
 | Name the square | A knight lands on a square, and you name it by tapping a file and then a rank, or typing them (e.g. `e` `4`) |
 | Follow the piece | A knight, bishop, rook or queen hops around the board one legal move at a time. You name each square it lands on. The square it left stays marked, so you learn the shape of its moves |
 
-Before each round, and on the round-end card, you choose:
+The chip at the top opens a sheet with the four drills. The settings button beside it
+opens a sheet where you choose:
 
 - **Play as** White or Black. Black flips the board. Each drill keeps separate stats
   for each side, because finding e4 from Black's side is a different skill from
@@ -38,9 +40,12 @@ Before each round, and on the round-end card, you choose:
 - **Piece** (Follow the piece only). Each piece keeps its own stats.
 - **Board labels**: file letters (a–h) along the bottom edge, rank numbers (1–8)
   along the left edge, both, or neither. Both are off by default.
+- **Sound**: soft synthesised chimes on a hit, a thud on a miss. On by default.
 
 A round is 20 squares. The clock starts when you press **Begin** or Enter, not when
-the page loads.
+the page loads. The square to find (or the one you're naming) is set large above the
+board, with a live timer, your streak, and a slim strip of the round's 20 answers.
+The naming drills use a file-and-rank keypad under the board.
 
 ### How it picks squares
 
@@ -65,23 +70,23 @@ If you miss a square, it is queued to come back twice: once 2–4 squares later 
 and never under 2 seconds), it is queued once, 4–7 squares later. A requeued square is
 labelled **Review** when it comes back.
 
-A wrong click shows your square in red and the right one in green. If it was a
-slip of the finger, **Misclick — count it** records the attempt as correct but keeps
-your real time.
+A hit glows brass. A wrong click shakes the board, shows your square in clay and the
+right one in sage. If it was a slip of the finger, **Misclick** (or **Mistap**) records
+the attempt as correct but keeps your real time.
 
 ### Stats
 
 At the end of a round you see:
 
-- your average per square, total time and accuracy
-- the squares you missed and what you clicked instead
-- your three slowest correct squares
-- the squares getting extra reps next round
-- an 8x8 heat map drawn as the board itself, from the side you're drilling, which you
-  can switch between average time, attempts and misses
-- your past rounds, with the best one highlighted
+- your average per square, large, with a burst of confetti when it's a personal best
+- your accuracy and total time
+- the squares you missed (with what you answered) and your slow squares, as chips
+- an 8x8 heat map drawn as the board, from the side you're drilling, which you can
+  switch between average time, reps and misses
 
-The heat map also shows under the board before each round.
+Before a round, **Your squares** opens the same heat map. Stats are saved under
+`cv-<drill>[-<piece>]-<side>-v1` (e.g. `cv-find-white-v1`) as `{ stats, history }`, and a
+finished round is saved as soon as it ends.
 
 ## Openings
 
