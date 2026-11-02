@@ -16,10 +16,9 @@ test("@live links a real Chess.com account and imports its whole history", async
   await page.getByRole("textbox", { name: /username/i }).fill(USER!);
   await page.getByRole("button", { name: /^link/i }).click();
 
-  const region = page.getByRole("region", { name: "Imported games" });
-  await expect(region.getByRole("button", { name: "Refresh" })).toBeEnabled({ timeout: 150_000 });
+  await expect(page.getByRole("button", { name: "Refresh" })).toBeEnabled({ timeout: 150_000 });
   await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
-  const count = Number((await region.locator("dt", { hasText: /^Games$/ }).locator("+ dd").innerText()).replace(/\D/g, ""));
+  const count = Number((await page.getByTestId("game-count").innerText()).replace(/\D/g, ""));
   expect(count).toBeGreaterThan(0);
   console.log(`${USER}: ${count} games imported from ${archives.length} monthly archives`);
 
