@@ -2,6 +2,7 @@
 // (side, piece, board labels, sound).
 import { PieceSvg } from "@/components/board";
 import { DRILLS, PIECES, SIDES, type Mode, type Prefs } from "./config";
+import { useSound } from "@/lib/delight";
 import styles from "./pickers.module.css";
 
 /** A tiny 4×4 board that sketches what each drill asks of you. */
@@ -55,6 +56,7 @@ export function DrillList({ current, onPick }: { current: Mode; onPick: (m: Mode
 }
 
 export function Settings({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (f: (p: Prefs) => Prefs) => void }) {
+  const [soundOn, setSoundOn] = useSound();
   return (
     <div className={styles.settings}>
       <div className={styles.setting}>
@@ -121,10 +123,10 @@ export function Settings({ prefs, setPrefs }: { prefs: Prefs; setPrefs: (f: (p: 
         <button
           type="button"
           role="switch"
-          aria-checked={prefs.sound}
+          aria-checked={soundOn}
           aria-label="Sound"
           className={styles.switch}
-          onClick={() => setPrefs((p) => ({ ...p, sound: !p.sound }))}
+          onClick={() => setSoundOn(!soundOn)}
         >
           <span />
         </button>

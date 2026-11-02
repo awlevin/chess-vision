@@ -40,7 +40,7 @@ export const cap = (c: Color) => (c === "white" ? "White" : "Black");
 // ---------- the section bar ----------
 
 const TABS = [
-  { href: "/openings", label: "Home" },
+  { href: "/openings", label: "Overview" },
   { href: "/openings/explorer", label: "Explore" },
   { href: "/openings/train", label: "Train" },
 ];

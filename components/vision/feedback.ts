@@ -8,18 +8,15 @@
 // Sound is synthesised (no audio files), soft, and created lazily on the
 // first call, which is always inside a tap or key press so browsers allow it.
 
+import { isSoundOn } from "@/lib/delight";
+
 export type FeedbackEvent = "begin" | "correct" | "miss" | "streak" | "roundEnd" | "best";
 
-let soundOn = true;
 let ctx: AudioContext | null = null;
 
-/** Called by the drill shell whenever the viewer's sound preference changes. */
-export function setSoundEnabled(on: boolean) {
-  soundOn = on;
-}
-
+// The mute switch is app-wide (lib/delight's useSound), shared with Openings.
 function audio(): AudioContext | null {
-  if (!soundOn || typeof window === "undefined") return null;
+  if (typeof window === "undefined" || !isSoundOn()) return null;
   try {
     if (!ctx) {
       const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;

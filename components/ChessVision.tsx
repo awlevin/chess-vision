@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { CONFIGS, loadPrefs, savePrefs, titleFor, type DrillConfig, type Prefs } from "./vision/config";
 import { Drill } from "./vision/Drill";
-import { setSoundEnabled } from "./vision/feedback";
 import { DrillList, Settings } from "./vision/Pickers";
 import { Sheet } from "./vision/Sheet";
 import styles from "./vision/vision.module.css";
@@ -41,7 +40,6 @@ export default function ChessVision() {
 
   useEffect(() => {
     savePrefs(prefs);
-    setSoundEnabled(prefs.sound);
   }, [prefs]);
 
   return (
