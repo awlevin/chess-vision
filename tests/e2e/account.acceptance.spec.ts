@@ -14,7 +14,10 @@ async function link(page: Page, username: string) {
   await page.getByRole("button", { name: /^link/i }).click();
 }
 
-const gameCount = (page: Page, n: number) => page.getByText(new RegExp(`\\b${n.toLocaleString("en-US")}\\s+games\\b`, "i")).first();
+// The "Games" stat on the account page, e.g. <dt>Games</dt><dd>156</dd>.
+const gameCount = (page: Page, n: number) =>
+  page.getByRole("region", { name: "Imported games" })
+    .locator("dt", { hasText: /^Games$/ }).locator("+ dd").filter({ hasText: new RegExp(`^${n.toLocaleString("en-US")}$`) });
 
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(NOW);
