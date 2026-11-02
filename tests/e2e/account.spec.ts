@@ -37,10 +37,18 @@ async function linkFixture(page: Page) {
   await expect(page.getByRole("button", { name: "Refresh" })).toBeEnabled();
 }
 
-/** The value shown under a summary label such as "Games" or "Blitz". */
-const stat = (page: Page, label: string) =>
-  page.locator("dl > div").filter({ has: page.getByText(label, { exact: true }) }).locator("dd");
-const gamesTotal = (page: Page) => stat(page, "Games");
+/** The big game count on /account. */
+const gamesTotal = (page: Page) => page.getByTestId("game-count");
+/** A time-control chip such as "Blitz 100". */
+const chip = (page: Page, label: string) =>
+  page.getByRole("list", { name: "By time control" }).getByRole("listitem").filter({ hasText: label });
+
+/** Unlink sits behind "Account options" and asks once. */
+async function unlinkAccount(page: Page) {
+  await page.getByRole("button", { name: "Account options" }).click();
+  await page.getByRole("button", { name: "Unlink Chess.com" }).click();
+  await page.getByRole("button", { name: "Yes, unlink" }).click();
+}
 
 test.use({ timezoneId: "UTC" });
 
@@ -69,7 +77,7 @@ test("links a player, imports their games one request at a time, and shows a sum
   expect(fetchesOf(api.requests, `${PLAYER}/games/archives`)).toBe(1);
   expect(await page.evaluate(() => (window as unknown as { __maxInflight: number }).__maxInflight)).toBe(1);
 
-  // Breakdown by time class and the date range.
+  // Breakdown by time class (one chip per class played) and when the games start.
   const counts: Record<string, number> = { Bullet: 0, Blitz: 0, Rapid: 0, Daily: 0 };
   const ends: number[] = [];
   for (const games of Object.values(FIXTURE_MONTHS) as { time_class: string; end_time: number }[][]) {
@@ -79,12 +87,12 @@ test("links a player, imports their games one request at a time, and shows a sum
     }
   }
   for (const [label, n] of Object.entries(counts)) {
-    await expect(stat(page, label)).toHaveText(String(n));
+    if (n > 0) await expect(chip(page, label)).toHaveText(`${label} ${n}`);
+    else await expect(chip(page, label)).toHaveCount(0);
   }
-  const day = (ms: number) =>
-    new Date(ms).toLocaleDateString("en-US", { timeZone: "UTC", year: "numeric", month: "short", day: "numeric" });
-  await expect(stat(page, "Date range")).toHaveText(`${day(Math.min(...ends))} – ${day(Math.max(...ends))}`);
-  await expect(stat(page, "Last synced")).toHaveText("just now");
+  const month = new Date(Math.min(...ends)).toLocaleDateString("en-US", { timeZone: "UTC", year: "numeric", month: "short" });
+  await expect(page.getByText(`games since ${month}`)).toBeVisible();
+  await expect(page.getByText("Synced just now")).toBeVisible();
 });
 
 test("keeps games across pages and reloads without refetching", async ({ page }) => {
@@ -104,6 +112,12 @@ test("keeps games across pages and reloads without refetching", async ({ page })
   await page.reload();
   await expect(gamesTotal(page)).toHaveText(String(FIXTURE_GAME_COUNT));
   await page.waitForTimeout(500);
+  expect(api.requests.length).toBe(after);
+
+  // The hub greets the player with their count.
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(FIXTURE_USER);
+  await expect(page.getByText(`${FIXTURE_GAME_COUNT} games imported`)).toBeVisible();
   expect(api.requests.length).toBe(after);
 });
 
@@ -144,7 +158,7 @@ test("a new device with a linked account imports on its own, and a stale sync re
   await page.clock.setFixedTime(new Date(NOW.getTime() + 2 * 60 * 60 * 1000));
   await page.reload();
   await expect.poll(() => fetchesOf(api.requests, `${PLAYER}/games/archives`)).toBe(1);
-  await expect(stat(page, "Last synced")).toHaveText("just now");
+  await expect(page.getByText("Synced just now")).toBeVisible();
   expect(api.requests).not.toContain(monthPath(MONTHS[0]));
 });
 
@@ -194,7 +208,14 @@ test("unlink forgets the account and its games on this device", async ({ page })
   await page.goto("/account");
   await linkFixture(page);
 
-  await page.getByRole("button", { name: "Unlink" }).click();
+  // Cancelling the confirmation keeps everything.
+  await page.getByRole("button", { name: "Account options" }).click();
+  await page.getByRole("button", { name: "Unlink Chess.com" }).click();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(gamesTotal(page)).toHaveText(String(FIXTURE_GAME_COUNT));
+
+  await unlinkAccount(page);
   await expect(page.getByLabel("Chess.com username")).toBeVisible();
   await page.reload();
   await expect(page.getByLabel("Chess.com username")).toBeVisible();

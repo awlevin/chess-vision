@@ -1,0 +1,165 @@
+/* Round end: an editorial page with one oversized number. */
+
+.summary {
+  /* The one display element on this screen, larger than the scale's display
+     step on purpose: it is the round's headline. Scoped here. */
+  --t-hero: clamp(88px, 30vw, 124px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--s4);
+}
+
+.kicker {
+  margin: 0;
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--ink-3);
+  animation: rise var(--d-slow) var(--ease-out) both;
+}
+.kicker[data-best] { color: var(--brass); }
+
+.hero {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  margin-top: var(--s2);
+  animation: rise var(--d-slow) var(--ease-out) both;
+  animation-delay: var(--stagger);
+}
+.number {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--t-hero);
+  line-height: 0.86;
+  letter-spacing: -0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
+}
+.kicker[data-best] + .hero .number { color: var(--brass-hi); }
+.per {
+  padding-top: var(--s3);
+  font-family: var(--font-display);
+  font-size: var(--t-title);
+  font-weight: 600;
+  line-height: 0.9;
+  color: var(--ink-2);
+}
+.per span {
+  font-family: var(--font-ui);
+  font-size: var(--t-small);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.line {
+  margin: var(--s3) 0 0;
+  font-size: var(--t-body);
+  color: var(--ink-2);
+  animation: rise var(--d-slow) var(--ease-out) both;
+  animation-delay: calc(var(--stagger) * 2);
+}
+
+.facts {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  margin-top: var(--s4);
+  font-size: var(--t-small);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  animation: rise var(--d-slow) var(--ease-out) both;
+  animation-delay: calc(var(--stagger) * 3);
+}
+/* The score pill: accuracy, tinted clay → stone → sage. */
+.pill {
+  padding: 5px var(--s3);
+  border-radius: var(--r-pill);
+  color: var(--on-brass);
+  font-size: 15px;
+  font-weight: 600;
+}
+.pill[data-tone="win"] { background: var(--win); }
+.pill[data-tone="draw"] { background: var(--draw); }
+.pill[data-tone="loss"] { background: var(--loss); }
+
+/* Missed and slow squares, as compact chips. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s5);
+}
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px var(--s3) 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  font-size: 13px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  animation: chipIn var(--d-slow) var(--ease-spring) both;
+  animation-delay: calc(var(--d-slow) + var(--i, 0) * var(--stagger));
+}
+.chip b {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+  font-feature-settings: "lnum" 1;
+}
+.chip[data-tone="miss"] b { color: var(--loss); }
+.chip s { text-decoration-thickness: 1px; }
+
+.heat { margin-top: var(--s6); }
+.heat h3 { margin: 0 0 var(--s3); font-size: var(--t-small); font-weight: 600; color: var(--ink-2); }
+
+/* The next round stays in thumb reach, above the tab bar. */
+.footer {
+  position: sticky;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + var(--s3));
+  z-index: 5;
+  margin-top: var(--s5);
+  padding-top: var(--s5);
+  background: linear-gradient(to top, var(--bg) 55%, transparent);
+}
+
+/* ---- confetti for a personal best ---- */
+.confetti {
+  position: absolute;
+  left: 32%;
+  top: 46%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.confetti span {
+  position: absolute;
+  width: 6px;
+  height: 10px;
+  background: var(--brass);
+  opacity: 0;
+  animation: burst 1200ms var(--ease-out) forwards;
+}
+.confetti span[data-tone="1"] { background: var(--brass-hi); }
+.confetti span[data-tone="2"] { background: var(--ink); }
+.confetti span[data-wide] { width: 10px; height: 5px; }
+
+@keyframes burst {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0) scale(0.6); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) + 70px)) rotate(var(--rot)) scale(1); }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes chipIn { from { opacity: 0; transform: scale(0.8); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .kicker, .hero, .line, .facts, .chip { animation: none; }
+  .confetti { display: none; }
+}

@@ -1,0 +1,74 @@
+/* ==========================================================================
+   Design language: "The Study"
+   A quiet, crafted chess room: walnut, brass and paper. Type does the work,
+   and the board is the hero. See DESIGN.md for the principles and rules.
+   These tokens are the single source of truth. Components use them and do
+   not invent their own colours, radii, shadows or easings.
+   ========================================================================== */
+:root {
+  /* ---- Surfaces: tonal steps, not borders ---- */
+  --bg: #13100D;                 /* the room */
+  --surface-1: #1C1814;          /* a raised sheet: cards, sheets */
+  --surface-2: #25201A;          /* pressed or selected; inputs */
+  --surface-3: #2F2921;          /* hover on surface-2; chips */
+  --hairline: rgba(242, 234, 219, 0.08);   /* the only divider; never a coloured edge */
+  --scrim: rgba(8, 6, 4, 0.62);
+  --glass: rgba(28, 24, 20, 0.72);         /* frosted bars (with backdrop-filter) */
+
+  /* ---- Ink ---- */
+  --ink: #F2EADB;                /* primary text */
+  --ink-2: #BDB09B;              /* secondary */
+  --ink-3: #807462;              /* tertiary and captions (>= 4.5:1 on --bg at 13px+) */
+
+  /* ---- One accent: brass ---- */
+  --brass: #D2AC6E;
+  --brass-hi: #E8C98F;           /* highlights and glow */
+  --brass-lo: #8E6C3C;
+  --on-brass: #1A140D;
+
+  /* ---- Outcome hues: warm, never traffic-light ---- */
+  --win: #9DBE7A;                /* sage */
+  --draw: #A79C8A;               /* stone */
+  --loss: #D27B5E;               /* clay */
+
+  /* ---- Board ---- */
+  --sq-light: #EBD8B2;
+  --sq-dark: #A97C53;
+  --sq-hl: rgba(232, 201, 143, 0.55);      /* last move, selection */
+
+  /* ---- Type ---- */
+  /* --font-cormorant and --font-inter are set by next/font in app/layout.tsx. */
+  --font-display: var(--font-cormorant, 'Cormorant Garamond'), Georgia, serif;
+  --font-ui: var(--font-inter, 'Inter'), system-ui, -apple-system, sans-serif;
+  --font-num: var(--font-inter, 'Inter'), system-ui, sans-serif; /* with tabular-nums */
+  /* Scale (px): display 48 · title 30 · heading 22 · body 16 · small 14 · caption 12 */
+  --t-display: 48px; --t-title: 30px; --t-heading: 22px; --t-body: 16px; --t-small: 14px; --t-caption: 12px;
+
+  /* ---- Space (4pt) ---- */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --gutter: 16px;                /* phone side margin */
+  --column: 480px;               /* max width of focused screens on desktop */
+
+  /* ---- Shape: one radius for sheets and cards, pills for chips and buttons ---- */
+  --r: 18px;
+  --r-sm: 12px;                  /* inner elements: inputs, small tiles */
+  --r-pill: 999px;
+
+  /* ---- Elevation: soft and warm, used sparingly ---- */
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-board: 0 2px 0 rgba(255, 255, 255, 0.04) inset, 0 24px 48px rgba(0, 0, 0, 0.45);
+
+  /* ---- Motion ---- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --d-fast: 120ms; --d-base: 200ms; --d-slow: 360ms;
+  --stagger: 40ms;
+
+  /* ---- Layout chrome ---- */
+  --tabbar-h: 64px;              /* phone bottom tab bar, plus the safe area */
+  --tap: 44px;                   /* minimum tap target */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --d-fast: 0ms; --d-base: 0ms; --d-slow: 0ms; --stagger: 0ms; }
+}

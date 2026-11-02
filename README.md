@@ -14,12 +14,17 @@ Features that analyse your play all read the same imported games through one
 contract (`useGames()` in `lib/games`). [Your Chess.com games](#your-chesscom-games)
 explains how they get there.
 
+The home page (`/`) greets you by your Chess.com name with your game count, and
+points to Vision and Openings. On a phone the sections sit in a bottom tab bar; on
+a desktop, in a slim bar at the top. The design language is in `DESIGN.md`.
+
 ## Vision drills
 
 Inspired by chess.com's Vision trainer. You get a coordinate and click the square, or
 a square lights up and you name it, and every answer is timed to the hundredth of a
 second. The app keeps per-square stats and uses them to decide which squares you see
-next. The drills live in `components/ChessVision.tsx` and `lib/drill.ts`.
+next. The mechanics live in `lib/drill.ts`; the screen is `components/ChessVision.tsx`
+plus the pieces in `components/vision/`.
 
 ### The drills
 
@@ -30,7 +35,8 @@ next. The drills live in `components/ChessVision.tsx` and `lib/drill.ts`.
 | Name the square | A knight lands on a square, and you name it by tapping a file and then a rank, or typing them (e.g. `e` `4`) |
 | Follow the piece | A knight, bishop, rook or queen hops around the board one legal move at a time. You name each square it lands on. The square it left stays marked, so you learn the shape of its moves |
 
-Before each round, and on the round-end card, you choose:
+The chip at the top opens a sheet with the four drills. The settings button beside it
+opens a sheet where you choose:
 
 - **Play as** White or Black. Black flips the board. Each drill keeps separate stats
   for each side, because finding e4 from Black's side is a different skill from
@@ -38,9 +44,12 @@ Before each round, and on the round-end card, you choose:
 - **Piece** (Follow the piece only). Each piece keeps its own stats.
 - **Board labels**: file letters (a–h) along the bottom edge, rank numbers (1–8)
   along the left edge, both, or neither. Both are off by default.
+- **Sound**: soft synthesised chimes on a hit, a thud on a miss. On by default.
 
 A round is 20 squares. The clock starts when you press **Begin** or Enter, not when
-the page loads.
+the page loads. The square to find (or the one you're naming) is set large above the
+board, with a live timer, your streak, and a slim strip of the round's 20 answers.
+The naming drills use a file-and-rank keypad under the board.
 
 ### How it picks squares
 
@@ -65,36 +74,41 @@ If you miss a square, it is queued to come back twice: once 2–4 squares later 
 and never under 2 seconds), it is queued once, 4–7 squares later. A requeued square is
 labelled **Review** when it comes back.
 
-A wrong click shows your square in red and the right one in green. If it was a
-slip of the finger, **Misclick — count it** records the attempt as correct but keeps
-your real time.
+A hit glows brass. A wrong click shakes the board, shows your square in clay and the
+right one in sage. If it was a slip of the finger, **Misclick** (or **Mistap**) records
+the attempt as correct but keeps your real time.
 
 ### Stats
 
 At the end of a round you see:
 
-- your average per square, total time and accuracy
-- the squares you missed and what you clicked instead
-- your three slowest correct squares
-- the squares getting extra reps next round
-- an 8x8 heat map drawn as the board itself, from the side you're drilling, which you
-  can switch between average time, attempts and misses
-- your past rounds, with the best one highlighted
+- your average per square, large, with a burst of confetti when it's a personal best
+- your accuracy and total time
+- the squares you missed (with what you answered) and your slow squares, as chips
+- an 8x8 heat map drawn as the board, from the side you're drilling, which you can
+  switch between average time, reps and misses
 
-The heat map also shows under the board before each round.
+Before a round, **Your squares** opens the same heat map. Stats are saved under
+`cv-<drill>[-<piece>]-<side>-v1` (e.g. `cv-find-white-v1`) as `{ stats, history }`, and a
+finished round is saved as soon as it ends.
 
 ## Openings
 
 Everything here is worked out in the browser from your imported games. There is no
 server-side analysis. Only standard chess from the normal starting position counts;
-variants and custom starts are skipped. The three pages share one set of filters (time
-control, period, rated only):
+variants and custom starts are skipped. It is designed for a phone first (390×844):
+one column, one job per screen, the board as the hero, and details a tap away. On
+desktop it is the same column, centred. The colour is in the URL (`?color=black`), and
+every screen except Train shares one set of filters (time control, period, rated
+only) in a bottom sheet behind a single chip.
 
-| Page | Route | What it does |
+| Screen | Route | What it does |
 |---|---|---|
-| Report | `/openings` | Your named openings per colour, the leaks worth fixing, and where you leave known theory |
-| Explorer | `/openings/explorer` | Your games as a move tree, with games, results and score for every next move |
-| Train | `/openings/train` | Play your side of the lines you actually reach, with spaced repetition |
+| Home | `/openings` | Today's training (a brass ring of what's due, and Start), your biggest leak with a board thumbnail and **Fix it**, your top 5 openings with score pills, and one line on where you leave book |
+| Leaks | `/openings/leaks` | Every leak for that colour, worst first: your move against the better one, each with Fix it |
+| Explorer | `/openings/explorer` | Your games as a move tree: the board, the line so far, the opening's name and the next moves as big rows |
+| Train | `/openings/train` | A focus mode: drill your side of the lines you actually reach, with spaced repetition |
+| Repertoire | `/openings/repertoire` | Every position you drill and its move; tap one to switch to another move you've played |
 
 ### The opening book
 
@@ -116,20 +130,19 @@ so the page never blocks. Each game is read once (its first 24 plies) and cached
 ### Explorer
 
 All your games of one colour, merged move by move from the starting position, up to
-move 8 (16 plies). For each next move you get the number of games, how often it was
-played, wins, draws and losses, and your score (wins plus half your draws). You also
-get the opening name, whether you're still in book, arrows for the most common moves,
-and your latest games from that position with links to Chess.com. Click a move in the
-table or play it on the board to go deeper. Back, Forward (along the most played move)
-and the move list step around, and so do ← and →. The line is kept in the URL
+move 8 (16 plies). The board comes first. Under it are the line so far (a scrolling
+breadcrumb with back and forward), the opening's name with your games and score
+there, and the next moves as rows: the move, its name, games, a slim win/draw/loss
+bar and your score (wins plus half your draws). Tap a row or play the move on the
+board to go deeper. Swipe the board, or press ← and →, to step back and forward along
+the most played move. A badge marks a position where you usually leave book, and
+recent games from that position sit behind an expander. The line is kept in the URL
 (`?color=black&moves=e2e4-d7d5`), so any position can be linked to.
 
-### Report: leaks and theory
+### Leaks and theory
 
-- **Your openings**: families (the part of the name before the colon) with their
-  variations, each with games, results, score, the last 10 results, and a trend. The
-  trend is the score in your last 10 games minus the score before them, shown once
-  there are 15 or more games.
+- **Your openings**: families (the part of the name before the colon), most played
+  first, each with games and a score pill. Tapping one opens the explorer there.
 - **Opening leaks**: a family or variation with at least 8 games that scores at least
   10 points below your average for that colour, and still 5 below after shrinking it
   towards your average as if you had played 6 more games at your average. That stops a
@@ -140,18 +153,19 @@ and the move list step around, and so do ← and →. The line is kept in the UR
   play most (4+ games) scores at least 15 points below another move you've played
   (4+ games), and still 6 below after shrinking both towards your score in that
   position. For example: "After 1.e4 e5
-  2.Nf3 Nc6 you play 3.d4 most often and score worst with it". **Drill X instead**
-  adopts the better move in the trainer.
-- Leaks are ranked by roughly the points they cost (games × score gap). The top 8 per
-  colour are shown.
+  2.Nf3 Nc6 you play 3.d4 most often and score worst with it". **Fix it** adopts the
+  better move in your repertoire and starts a drill on that line
+  (`/openings/train?line=e4 e5 Nf3 Nc6&go=1`).
+- Leaks are ranked by roughly the points they cost (games × score gap). Home shows the
+  worst one, and `/openings/leaks` shows all of them.
 - **Where you leave theory**: in each game, the first move that reaches a position on
-  no named line. If that move was yours, it is grouped by position and move, and the
-  most common are shown with your score and the book moves you could have played,
-  ordered by how many named lines go through them. Games where the opponent left
+  no named line. Home sums it up in one line (how often it's you who leaves first,
+  and your most common exit, with a link to it in the explorer); the explorer marks
+  positions where your most played move leaves book. Games where the opponent left
   book first are counted separately, and so are games where the book simply ran out.
 
-**Engine checks (optional, off by default).** Tick *Check with the Lichess cloud
-engine* to compare your move with the engine at each theory exit and move-choice leak.
+**Engine checks (optional, off by default).** Turn on *Check with the Lichess engine*
+in the filter sheet to compare your move with the engine at each move-choice leak.
 Where the engine's best move is at least half a pawn better (or your move isn't in its
 top 5), you can drill the engine's move instead. This uses the free
 [Lichess cloud-eval API](https://lichess.org/api#tag/Analysis/operation/apiCloudEval)
@@ -176,24 +190,32 @@ becomes a card when:
   actually played
 
 A card's move is the move you've played most there, with games from the last year
-counting double. You can adopt any other move you've played (or the report's
-suggestion, or the engine's move). That resets the card's progress. The repertoire
+counting double. On `/openings/repertoire` you can adopt any other move you've played
+there; Fix it and the engine can adopt one too. That resets the card's progress. The
 list marks a move that clearly scores better, using the move-choice leak rule.
+
+**A session** is up to 10 target positions: the due ones, earliest first (Review);
+the worst ones (**Fix my leaks**, `?mode=leaks`); the positions on one line
+(`?line=e4 e5 Nf3`, from a leak's Fix it); or, once you're caught up, the least
+recently seen (**Practise anyway**). `?go=1` starts it straight away. While it runs
+the screen is just the board, one prompt line, a progress dot per target (sage for
+first-time right, clay for a miss) and your streak. It ends with a summary card and a
+small brass burst: "9 of 10 · 9 positions levelled up · next review tomorrow".
 
 **A line** starts from the initial position. The opponent's reply is drawn at random,
 weighted by how often your opponents played each move against you. Only replies that
-lead on to a position that needs practice are drawn: one that is due in **Review**,
-or one of the worst positions in **Fix my leaks**. When none is left down the line,
-the line ends. You play your moves by click-click or drag. A wrong move is marked red
-and the expected move is shown with an arrow. You then play it, or press **Show me**,
-to go on.
+lead on to a target you haven't answered yet are drawn. When none is left down the
+line, the line ends and **Next line** starts another. You play your moves by
+click-click or drag. A right move glows brass on its square; a wrong one flashes clay,
+shakes the board, and the expected move is shown with an arrow. You then play it, or
+press **Show me**, to go on.
 
 **Scheduling** (`lib/openings/srs.ts`) is Leitner boxes. A correct answer on a due
 position moves it up a box, due again in 1, 3, 7, 14, 30, 60, then 120 days. A miss
 sends it back to box 0 and it is due again in 2 minutes, so it returns in the same
-session. A correct answer on a position that isn't due yet (one you pass on the way to
-another) is counted but doesn't move it up. New positions are due at once. When
-nothing is due, **Practise anyway** plays lines over all your positions.
+session if you start another. A correct answer on a position that isn't due yet (one
+you pass on the way to another) is counted but doesn't move it up. New positions are
+due at once.
 
 **Fix my leaks** drills the 10 positions with the highest leak score:
 your misses in the trainer, plus the points your games lose after your move there
@@ -205,12 +227,31 @@ user. The keys are:
 
 | Key | Holds |
 |---|---|
-| `op-filters-v1` | The report and explorer filters |
+| `op-filters-v1` | The filters for Home, Leaks and the explorer |
 | `op-cards-white-v1`, `op-cards-black-v1` | Review state for each position: box, due time, times seen, misses |
 | `op-rep-white-v1`, `op-rep-black-v1` | Moves you've adopted in place of your usual move |
 | `op-engine-v1` | Whether engine checks are on |
 
-The engine cache (`op-eval-cache-v1`) is kept in this browser's localStorage only.
+The engine cache (`op-eval-cache-v1`) and the sound setting (`delight-sound-v1`) are
+kept in this browser's localStorage only.
+
+### Delight
+
+`lib/delight` holds small, dependency-free primitives any screen can use. All of them
+respect `prefers-reduced-motion` and are safe to call on the server or on browsers
+without the feature.
+
+| API | What it does |
+|---|---|
+| `playSound(name)` | WebAudio-synthesised sounds, no audio files: `move`, `capture`, `castle` (wood clicks), `correct` (a warm two-note chime), `wrong` (a soft thud), `complete` (a rising arpeggio). Silent until the first gesture unlocks audio, and when sound is off |
+| `soundForSan(san)` | The right one of `move`, `capture` or `castle` for a move |
+| `installAudioUnlock()` | Creates the AudioContext on the first pointerdown or keydown |
+| `useSound()` | `[on, setOn]`: the persisted sound setting, default on |
+| `haptic(kind)` | `navigator.vibrate`: `tick`, `miss` (a double buzz), `success`. A no-op on iOS |
+| `feedback(kind)` | Sound plus haptic for `correct`, `wrong` or `complete` |
+| `burst(elementOrPoint, opts?)` | A one-second brass confetti and sparkle burst on a throwaway canvas |
+| `useCountUp(target, ms?)` | Counts a number up (or down) with an ease-out |
+| `useReducedMotion()` | The media query, live |
 
 ### The board component
 
@@ -230,6 +271,9 @@ import { Chessboard } from "@/components/board";
   markers={[{ square: "d5", tone: "bad" }]}
   coordinates                     // default true
   label="Analysis board"          // accessible name, default "Chessboard"
+  effect={{ kind: "glow", square: "f3", id: n }}   // replays when id changes: "glow" (brass pulse) or "miss" (clay flash and a shake)
+  onSwipe={(dir) => step(dir)}    // horizontal swipes that don't start on a movable piece
+  framed                          // the walnut frame, default true; false for thumbnails
 />
 ```
 
@@ -238,7 +282,9 @@ import { Chessboard } from "@/components/board";
   Space picks a piece up and puts it down.
 - Promotion opens a piece picker. The legal targets of the selected piece are marked,
   a king in check is highlighted, and a piece slides in for the last move unless
-  reduced motion is set.
+  reduced motion is set. A captured piece sinks away under the piece that took it,
+  and a castling rook slides with its king.
+- The board sits in a walnut frame with a faint wood grain, from the design tokens.
 - Test hooks: the board is `role="group"` with `data-fen`, `data-orientation` and
   `data-turn`. Each square has `data-square` and, when occupied, `data-piece` (`wP`,
   `bK`, ...). Squares can also carry `data-selected`, `data-target`, `data-last`,
@@ -258,9 +304,11 @@ import { Chessboard } from "@/components/board";
 
 On `/account` you link a Chess.com username. The app checks it against the
 profile endpoint, so an unknown name gets a clear error, and then it imports the
-player's games. The page shows the import's progress. When it finishes, the page
-shows the avatar and name, the game count by time class, the date range, when the
-games were last synced, and **Refresh** and **Unlink** buttons.
+player's games while a knight hops along the progress bar ("Importing month 3 of
+25"). When it finishes, the page shows the avatar and name, the game count as one
+big number with a chip per time class, when the games were last synced, and a round
+**Refresh** button. **Unlink** sits behind the "⋯" (Account options) sheet and asks
+once before forgetting the account.
 
 ### Ownership verification (not built)
 
@@ -365,15 +413,20 @@ on raw Chess.com JSON.
 | Component | Use |
 |---|---|
 | `<GamesGate linkTitle? linkMessage?>` | Wrap a feature. Shows loading, a link prompt, the first import's progress, an import error with **Try again**, or "No games yet" until there are games, then renders its children |
-| `<LinkAccountPrompt title? headingLevel?>` | The "Link your Chess.com account" card with a link to `/account`. Its children are the body text |
-| `<SyncStatus showRefresh?>` | One line: "1,527 games from Hikaru · synced 5 minutes ago · Refresh", the import's progress, or the last error with **Retry** |
-| `<SyncProgress sync>` | A labelled progress bar for a running import |
+| `<LinkAccountPrompt title? headingLevel?>` | The knight, a title, one line (its children) and a **Link Chess.com account** button to `/account` |
+| `<SyncStatus showRefresh?>` | One line: "1,527 games · synced 5 minutes ago" with a round refresh button, the import's progress, or the last error with **Retry** |
+| `<SyncProgress sync>` | The knight hopping along a running import's progress, labelled "Importing month 3 of 25" |
+| `<RefreshButton onClick syncing?>` | A round refresh icon button (named "Refresh") that spins and disables while syncing |
+| `<CountUp value>` | A number that counts up to `value` and lands on it exactly (instant under reduced motion) |
 
 ## How it's built
 
-- **Next.js 16 App Router.** `app/layout.tsx` renders the section nav (`components/AppNav.tsx`)
+- **Next.js 16 App Router.** `app/layout.tsx` loads the fonts with `next/font`, renders the
+  section nav (`components/AppNav.tsx`: a bottom tab bar on phones, a top bar from 768px)
   and `components/AppProviders.tsx`, which installs `window.storage` and the games store
-  for every page. Shared design tokens are in `app/globals.css`.
+  for every page. Design tokens are in `app/design-tokens.css` (see `DESIGN.md`); the
+  shell and shared primitives (`.page`, `.rise` stagger, `.sr-only`) are in `app/globals.css`.
+  Pages pad their bottom by `--chrome-bottom` (the tab bar plus the safe area) via `body`.
 - `lib/site.ts` holds the app name and sections.
 - `lib/games` holds the games contract (`types.ts`), the Chess.com normalizer, the API
   client, the IndexedDB cache and the sync store.
@@ -431,8 +484,8 @@ The end-to-end tests drive the production build in local mode. `tests/e2e/chessc
 fakes api.chess.com from `tests/fixtures/chesscom-testplayer.json` (user `testplayer`,
 156 real games over 4 months). `tests/e2e/account.spec.ts` covers linking, import,
 incremental refresh, a new device, stale auto-refresh, partial failure and unlinking,
-and it checks which requests reach Chess.com. `tests/e2e/openings.spec.ts` covers the
-explorer, report, trainer and board.
+and it checks which requests reach Chess.com. `tests/e2e/openings.spec.ts` covers home,
+leaks, Fix it, the explorer, a full training session, sound, the board and 360px phones.
 
 The `*.acceptance.spec.ts` files check the app against an independent reading of the
 same fixture: `tests/e2e/fixture-stats.ts` replays the raw games with chess.js and never

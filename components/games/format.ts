@@ -41,9 +41,14 @@ export function formatCount(n: number, noun: string): string {
   return `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
 }
 
-/** "Checking Chess.com for games…" or "Importing games… 3 of 24 months". */
+/** "Checking Chess.com…" or "Importing month 3 of 24" (the month being fetched). */
 export function syncLabel(sync: Extract<SyncState, { status: "syncing" }>): string {
   return sync.total === 0
-    ? "Checking Chess.com for games…"
-    : `Importing games… ${sync.done} of ${formatCount(sync.total, "month")}`;
+    ? "Checking Chess.com…"
+    : `Importing month ${Math.min(sync.done + 1, sync.total)} of ${sync.total}`;
+}
+
+/** "Mar 2021". */
+export function formatMonth(ms: number): string {
+  return new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "short" });
 }

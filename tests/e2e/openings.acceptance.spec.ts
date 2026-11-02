@@ -15,22 +15,17 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/account");
   await page.getByRole("textbox", { name: /username/i }).fill("testplayer");
   await page.getByRole("button", { name: /^link/i }).click();
-  await expect(
-    page.getByRole("region", { name: "Imported games" }).locator("dt", { hasText: /^Games$/ }).locator("+ dd"),
-  ).toHaveText(String(FIXTURE_GAME_COUNT), { timeout: 30_000 });
+  await expect(page.getByTestId("game-count")).toHaveText(String(FIXTURE_GAME_COUNT), { timeout: 30_000 });
 });
 
-/** Reads the "Next moves" table: SAN → { games, pct }. */
+/** Reads the explorer's next moves: SAN → { games, pct }. */
 async function nextMoves(page: Page) {
-  const rows = page.getByRole("table", { name: "Next moves" }).locator("tbody tr[data-move]");
+  const rows = page.getByTestId("next-moves").locator("[data-move]");
   await expect(rows.first()).toBeVisible();
   const out = new Map<string, { games: number; pct: number }>();
   for (const row of await rows.all()) {
     const san = (await row.getAttribute("data-move"))!;
-    const cells = row.locator("td");
-    const games = Number((await cells.nth(1).innerText()).trim().split(/\s+/)[0]);
-    const pct = Number((await cells.nth(3).innerText()).replace(/\D/g, ""));
-    out.set(san, { games, pct });
+    out.set(san, { games: Number(await row.getAttribute("data-games")), pct: Number(await row.getAttribute("data-score")) });
   }
   return out;
 }
@@ -48,7 +43,7 @@ for (const color of ["white", "black"] as const) {
 
     // Descend into the most common first move and check every reply.
     const [first] = [...root].sort((a, b) => b[1].games - a[1].games)[0];
-    await page.getByRole("table", { name: "Next moves" }).locator(`tr[data-move="${first}"] button`).first().click();
+    await page.getByTestId("next-moves").locator(`[data-move="${first}"]`).click();
     const replies = await nextMoves(page);
     const total = [...replies.values()].reduce((n, r) => n + r.games, 0);
     expect(total).toBeLessThanOrEqual(root.get(first)!.games);
@@ -59,23 +54,20 @@ for (const color of ["white", "black"] as const) {
   });
 }
 
-test("every move-choice leak the report claims is true of the raw games", async ({ page }) => {
-  await page.goto("/openings");
-  const leaks = page.getByRole("region", { name: "Leaks to fix" }).getByRole("listitem");
-  await expect(leaks.first()).toBeVisible();
+test("every move-choice leak the app claims is true of the raw games", async ({ page }) => {
+  // Every leak for a colour is listed at /openings/leaks.
+  await page.goto("/openings/leaks?color=white");
+  const leaks = page.locator('[data-leak="move-choice"]');
+  await expect(leaks.first()).toBeAttached();
 
-  const sans = (line: string) => line.replace(/\d+\.(\.\.)?/g, " ").trim().split(/\s+/).filter(Boolean);
   let checked = 0;
   for (const leak of await leaks.all()) {
-    const text = await leak.innerText();
-    // "After 1.e4 e5 you play 2.Nf3 most often and score worst with it: 40% in 21 games."
-    const m = text.match(/After (.+?) you play (\S+) most often.*?: (\d+)% in (\d+) games[\s\S]*?With (\S+) you score (\d+)% in (\d+) games/);
-    if (!m) continue;
-    const prefix = sans(m[1]);
-    const usual = lineStats("white", [...prefix, ...sans(m[2])]);
-    const better = lineStats("white", [...prefix, ...sans(m[5])]);
-    expect({ pct: usual.pct, games: usual.games }).toEqual({ pct: Number(m[3]), games: Number(m[4]) });
-    expect({ pct: better.pct, games: better.games }).toEqual({ pct: Number(m[6]), games: Number(m[7]) });
+    const attr = async (n: string) => (await leak.getAttribute(`data-${n}`))!;
+    const prefix = (await attr("line")).split(" ").filter(Boolean);
+    const usual = lineStats("white", [...prefix, await attr("usual")]);
+    const better = lineStats("white", [...prefix, await attr("better")]);
+    expect({ games: usual.games, pct: usual.pct }).toEqual({ games: Number(await attr("usual-games")), pct: Number(await attr("usual-score")) });
+    expect({ games: better.games, pct: better.pct }).toEqual({ games: Number(await attr("better-games")), pct: Number(await attr("better-score")) });
     expect(better.pct).toBeGreaterThan(usual.pct);
     checked++;
   }

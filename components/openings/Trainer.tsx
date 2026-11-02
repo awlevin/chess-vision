@@ -1,39 +1,48 @@
 "use client";
 
-// Trainer: play your side of the lines you actually reach. Opponent moves
-// are picked by how often your opponents played them, steered towards the
-// positions that need practice: due ones in Review, the worst ones in Fix
-// my leaks. See lib/openings/repertoire.ts and lib/openings/srs.ts.
+// Trainer: a focus mode for playing your side of the lines you really reach.
+// A session is up to SESSION_SIZE target positions: the due ones (Review),
+// the worst ones (Fix my leaks, ?mode=leaks), one line (?line=e4 e5 Nf3), or
+// the least recently seen (Practise). Opponent replies are drawn by how
+// often your opponents played them, steered towards targets you haven't
+// answered yet. See lib/openings/repertoire.ts and lib/openings/srs.ts.
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Chessboard, type BoardArrow, type BoardMarker, type BoardMove } from "@/components/board";
+import { Chessboard, type BoardArrow, type BoardEffect, type BoardMove } from "@/components/board";
 import type { Color } from "@/lib/games";
 import { fenFromKey, START_KEY } from "@/lib/chess/fast";
-import { formatLine, moveLabel, pct, plural, shortDate } from "@/lib/openings/format";
-import {
-  buildGraph,
-  buildRepertoire,
-  leakCards,
-  pickReply,
-  targetsBelow,
-  type Card,
-  type RepMove,
-  type Repertoire,
-} from "@/lib/openings/repertoire";
-import { isDue, LEARNED_BOX, MAX_BOX, review, type CardStates } from "@/lib/openings/srs";
-import { score } from "@/lib/openings/stats";
-import { useOpenings } from "./OpeningsProvider";
-import { ColorToggle, styles as s } from "./ui";
-import { useRepertoireStore } from "./useRepertoireStore";
+import { burst, feedback, haptic, playSound, soundForSan } from "@/lib/delight";
+import { plural } from "@/lib/openings/format";
+import { homeHref, repertoireHref, trainerHref } from "@/lib/openings/links";
+import { leakCards, onLine, pickReply, targetsBelow, type Card, type RepMove } from "@/lib/openings/repertoire";
+import { isDue, review } from "@/lib/openings/srs";
+import { relativeDay } from "./Home";
+import { cap, ColorToggle, Empty, Knight, LineText, MoveText, Ring, SectionBar, styles as s, useColor } from "./ui";
+import { useTraining } from "./useTraining";
 
-type Mode = "review" | "leaks" | "practice";
+type Mode = "review" | "leaks" | "line" | "practice";
+type Result = "hit" | "miss";
 
-type Feedback =
-  | { kind: "correct"; san: string; square: string }
-  | { kind: "miss"; played: string; square: string; expected: RepMove };
+const SESSION_SIZE = 10;
+const OPPONENT_DELAY = 520;
+const AFTER_CORRECT_DELAY = 480;
+const squaresOf = (uci: string) => ({ from: uci.slice(0, 2), to: uci.slice(2, 4) });
+
+interface Session {
+  mode: Mode;
+  /** The positions this session clears, in no particular order. */
+  targets: Set<string>;
+  /** First answer at each target, in the order given. */
+  results: { key: string; result: Result }[];
+  streak: number;
+  best: number;
+  levelled: number;
+}
+
+type Feedback = { kind: "correct"; san: string; ply: number } | { kind: "miss"; played: string; expected: RepMove };
 
 interface Line {
-  mode: Mode;
   key: string;
   ply: number;
   sans: string[];
@@ -42,33 +51,26 @@ interface Line {
   feedback: Feedback | null;
   correct: number;
   missed: number;
-  /** Positions from which a target can still be reached. */
   below: Set<string>;
-  end?: "complete" | "caught-up" | "no-leaks";
+  end?: "line" | "session" | "caught-up" | "no-leaks";
 }
 
-const OPPONENT_DELAY = 550;
-const AFTER_CORRECT_DELAY = 420;
-const squaresOf = (uci: string) => ({ from: uci.slice(0, 2), to: uci.slice(2, 4) });
-const cap = (c: Color) => (c === "white" ? "White" : "Black");
-
 export default function Trainer() {
-  const { all } = useOpenings();
+  const [color, setColor] = useColor();
   const params = useSearchParams();
-  const [color, setColor] = useState<Color>(params.get("color") === "black" ? "black" : "white");
-  const [mode, setMode] = useState<"review" | "leaks">(params.get("mode") === "leaks" ? "leaks" : "review");
-  const store = useRepertoireStore(color);
-  const { overrides, cards: states, setCards, adopt, loaded } = store;
+  const lineParam = params.get("line") ?? "";
+  const mode: Mode = lineParam ? "line" : params.get("mode") === "leaks" ? "leaks" : "review";
+  // A new colour, mode or line is a fresh trainer.
+  return <TrainerSession key={`${color}|${mode}|${lineParam}`} color={color} setColor={setColor} mode={mode} lineSans={lineParam.split(" ").filter(Boolean)} go={params.get("go") === "1"} />;
+}
 
-  const graph = useMemo(() => buildGraph(all, color), [all, color]);
-  const rep = useMemo(() => buildRepertoire(graph, overrides), [graph, overrides]);
-  const baseline = useMemo(() => {
-    const mine = all.filter((g) => g.game.color === color);
-    return mine.length ? mine.reduce((a, g) => a + g.points, 0) / mine.length : 0.5;
-  }, [all, color]);
+function TrainerSession({ color, setColor, mode, lineSans, go }: { color: Color; setColor: (c: Color) => void; mode: Mode; lineSans: string[]; go: boolean }) {
+  const t = useTraining(color);
+  const { rep, cards: states, setCards, loaded, counts, leaks, nextDue } = t;
 
-  const [clock, setClock] = useState(() => Date.now());
   const [line, setLine] = useState<Line | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [effect, setEffect] = useState<BoardEffect | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const clearTimers = () => {
     timers.current.forEach(clearTimeout);
@@ -76,69 +78,110 @@ export default function Trainer() {
   };
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  const counts = useMemo(() => {
-    let due = 0, fresh = 0, learned = 0;
-    for (const c of rep.order) {
-      const st = states[c.key];
-      if (!st) fresh++;
-      else if (isDue(st, clock)) due++;
-      if ((st?.box ?? 0) >= LEARNED_BOX) learned++;
-    }
-    return { due, fresh, learned };
-  }, [rep, states, clock]);
-  const leaks = useMemo(() => leakCards(rep, states, baseline), [rep, states, baseline]);
+  // Timers read the latest state through these.
+  const latest = useRef({ session });
+  useEffect(() => {
+    latest.current = { session };
+  });
 
-  const reset = () => {
-    clearTimers();
-    setLine(null);
-  };
+  const focus = useMemo(() => (lineSans.length ? onLine(lineSans) : null), [lineSans]);
 
-  // ---- the line state machine ----
+  // ---- choosing what a session drills ----
 
-  function proceed(l: Line) {
-    const card = rep.cards.get(l.key);
-    if (card) {
-      if (!l.below.has(l.key)) return setLine({ ...l, phase: "done", end: "complete" });
-      return setLine({ ...l, phase: "you" });
-    }
-    const reply = pickReply(rep, l.key, l.below);
-    if (!reply) return setLine({ ...l, phase: "done", end: "complete" });
-    setLine({ ...l, phase: "opponent" });
-    timers.current.push(
-      setTimeout(() => {
-        proceed({ ...l, key: reply.to, ply: l.ply + 1, sans: [...l.sans, reply.san], last: squaresOf(reply.uci), feedback: null, phase: "opponent" });
-      }, OPPONENT_DELAY),
-    );
+  function pickTargets(m: Mode, now: number): Card[] {
+    if (m === "leaks") return leakCards(rep, states, t.baseline, SESSION_SIZE);
+    if (m === "line") return rep.order.filter((c) => focus?.(c)).slice(0, SESSION_SIZE);
+    if (m === "practice") return [...rep.order].sort((a, z) => (states[a.key]?.last ?? 0) - (states[z.key]?.last ?? 0)).slice(0, SESSION_SIZE);
+    return rep.order.filter((c) => isDue(states[c.key], now)).slice(0, SESSION_SIZE);
   }
 
-  function start(m: Mode) {
+  /** Targets of `sess` not answered yet, as a reachability set. */
+  function remaining(sess: Session) {
+    const done = new Set(sess.results.map((r) => r.key));
+    return targetsBelow(rep, (c) => sess.targets.has(c.key) && !done.has(c.key));
+  }
+
+  function startSession(m: Mode) {
     clearTimers();
-    const now = Date.now();
-    setClock(now);
-    const leakSet = new Set(leaks.map((c) => c.key));
-    const isTarget = m === "review" ? (c: Card) => isDue(states[c.key], now) : m === "leaks" ? (c: Card) => leakSet.has(c.key) : () => true;
-    const below = targetsBelow(rep, isTarget);
-    const l: Line = { mode: m, key: START_KEY, ply: 0, sans: [], last: null, phase: "opponent", feedback: null, correct: 0, missed: 0, below };
+    setEffect(null);
+    const now = t.tick();
+    const picked = pickTargets(m, now);
+    const reach = targetsBelow(rep, (c) => picked.includes(c));
+    const sess: Session = { mode: m, targets: new Set(picked.filter((c) => reach.has(c.key)).map((c) => c.key)), results: [], streak: 0, best: 0, levelled: 0 };
+    setSession(sess);
+    latest.current.session = sess;
+    startLine(sess);
+  }
+
+  function startLine(sess: Session) {
+    clearTimers();
+    setEffect(null);
+    const below = remaining(sess);
+    const l: Line = { key: START_KEY, ply: 0, sans: [], last: null, phase: "opponent", feedback: null, correct: 0, missed: 0, below };
     if (!below.has(START_KEY)) {
-      setLine({ ...l, phase: "done", end: m === "leaks" ? "no-leaks" : "caught-up" });
+      const end = sess.results.length ? "session" : sess.mode === "leaks" || sess.mode === "line" ? "no-leaks" : "caught-up";
+      setLine({ ...l, phase: "done", end });
       return;
     }
     proceed(l);
   }
 
-  function advanceAfter(l: Line, move: RepMove, uci: string, graded: "correct" | "none") {
+  function finishLine(l: Line) {
+    const sess = latest.current.session;
+    const more = sess ? remaining(sess).has(START_KEY) : false;
+    setLine({ ...l, phase: "done", end: more ? "line" : "session" });
+  }
+
+  function proceed(l: Line) {
+    if (rep.cards.has(l.key)) {
+      if (!l.below.has(l.key)) return finishLine(l);
+      return setLine({ ...l, phase: "you" });
+    }
+    const reply = pickReply(rep, l.key, l.below);
+    if (!reply) return finishLine(l);
+    setLine({ ...l, phase: "opponent" });
+    timers.current.push(
+      setTimeout(() => {
+        playSound(soundForSan(reply.san));
+        proceed({ ...l, key: reply.to, ply: l.ply + 1, sans: [...l.sans, reply.san], last: squaresOf(reply.uci), feedback: null, phase: "opponent" });
+      }, OPPONENT_DELAY),
+    );
+  }
+
+  function advanceAfter(l: Line, move: RepMove, uci: string, graded: boolean) {
     const next: Line = {
       ...l,
       key: move.to,
       ply: l.ply + 1,
       sans: [...l.sans, move.san],
       last: squaresOf(uci),
-      feedback: graded === "correct" ? { kind: "correct", san: move.san, square: uci.slice(2, 4) } : null,
+      feedback: graded ? { kind: "correct", san: move.san, ply: l.ply } : null,
       phase: "opponent",
-      correct: l.correct + (graded === "correct" ? 1 : 0),
+      correct: l.correct + (graded ? 1 : 0),
     };
     setLine(next);
     timers.current.push(setTimeout(() => proceed(next), AFTER_CORRECT_DELAY));
+  }
+
+  function record(card: Card, correct: boolean) {
+    const now = Date.now();
+    const prev = states[card.key];
+    const nextState = review(prev, correct, now);
+    setCards((all) => ({ ...all, [card.key]: review(all[card.key], correct, now) }));
+    setSession((sess) => {
+      if (!sess) return sess;
+      const first = sess.targets.has(card.key) && !sess.results.some((r) => r.key === card.key);
+      const streak = correct ? sess.streak + 1 : 0;
+      const next: Session = {
+        ...sess,
+        results: first ? [...sess.results, { key: card.key, result: correct ? "hit" : "miss" }] : sess.results,
+        streak,
+        best: Math.max(sess.best, streak),
+        levelled: sess.levelled + (correct && nextState.box > (prev?.box ?? 0) ? 1 : 0),
+      };
+      latest.current.session = next;
+      return next;
+    });
   }
 
   function onMove(m: BoardMove) {
@@ -146,289 +189,294 @@ export default function Trainer() {
     const card = rep.cards.get(line.key);
     if (!card) return;
     const expected = card.move;
-    const now = Date.now();
     if (m.uci === expected.uci) {
-      if (line.phase === "you") setCards((prev) => ({ ...prev, [card.key]: review(prev[card.key], true, now) }));
-      advanceAfter(line, expected, m.uci, line.phase === "you" ? "correct" : "none");
+      playSound(soundForSan(m.san));
+      if (line.phase === "you") {
+        record(card, true);
+        setEffect({ kind: "glow", square: m.to, id: Date.now() });
+        timers.current.push(setTimeout(() => feedback("correct"), 90));
+      } else setEffect(null);
+      advanceAfter(line, expected, m.uci, line.phase === "you");
       return;
     }
-    if (line.phase === "you") setCards((prev) => ({ ...prev, [card.key]: review(prev[card.key], false, now) }));
-    setLine({
-      ...line,
-      phase: "retry",
-      missed: line.missed + (line.phase === "you" ? 1 : 0),
-      feedback: { kind: "miss", played: m.san, square: m.to, expected },
-    });
+    if (line.phase === "you") record(card, false);
+    feedback("wrong");
+    setEffect({ kind: "miss", square: m.to, id: Date.now() });
+    setLine({ ...line, phase: "retry", missed: line.missed + (line.phase === "you" ? 1 : 0), feedback: { kind: "miss", played: m.san, expected } });
   }
 
   function showMe() {
     if (!line || line.phase !== "retry") return;
     const card = rep.cards.get(line.key);
-    if (card) advanceAfter(line, card.move, card.move.uci, "none");
+    if (!card) return;
+    playSound(soundForSan(card.move.san));
+    setEffect(null);
+    advanceAfter(line, card.move, card.move.uci, false);
   }
 
-  const switchColor = (c: Color) => {
-    reset();
-    setColor(c);
-  };
-  const switchMode = (m: "review" | "leaks") => {
-    reset();
-    setMode(m);
-  };
+  function nextLine() {
+    if (!session || !line || line.end === "session" || line.end === "caught-up" || line.end === "no-leaks") startSession("practice");
+    else startLine(session);
+  }
+
+  function endSession() {
+    clearTimers();
+    setLine(null);
+    setSession(null);
+    setEffect(null);
+  }
+
+  // Arriving with ?go=1 (from Home or a leak's "Fix it") starts at once.
+  const autostarted = useRef(false);
+  const startRef = useRef(() => startSession(mode));
+  useEffect(() => {
+    startRef.current = () => startSession(mode);
+  });
+  useEffect(() => {
+    if (!go || !loaded || rep.cards.size === 0) return;
+    const id = setTimeout(() => {
+      if (autostarted.current) return;
+      autostarted.current = true;
+      const q = new URLSearchParams(window.location.search);
+      q.delete("go");
+      window.history.replaceState(null, "", `?${q.toString()}`);
+      startRef.current();
+    }, 150);
+    return () => clearTimeout(id);
+  }, [go, loaded, rep]);
+
+  // ---- render ----
 
   if (rep.cards.size === 0) {
     return (
       <>
-        <div className={s.toolbar}><ColorToggle value={color} onChange={switchColor} /></div>
-        <section className={s.empty}>
-          <h2>Not enough games yet</h2>
-          <p>{`The trainer drills positions you've reached at least 3 times as ${cap(color)}. Play a few more games and come back.`}</p>
-        </section>
+        <SectionBar />
+        <div className={s.controls}><ColorToggle value={color} onChange={setColor} /></div>
+        <Empty title="Not enough games yet">{`Positions you reach 3 times as ${cap(color)} become drills. Play a few more and come back.`}</Empty>
       </>
     );
   }
 
   const card = line ? rep.cards.get(line.key) : undefined;
   const fen = fenFromKey(line?.key ?? START_KEY, line?.ply ?? 0);
+  const yourTurn = line?.phase === "you" || line?.phase === "retry";
   const arrows: BoardArrow[] = [];
-  const markers: BoardMarker[] = [];
-  if (line?.feedback?.kind === "correct") markers.push({ square: line.feedback.square, tone: "good" });
-  if (line?.feedback?.kind === "miss") {
-    markers.push({ square: line.feedback.square, tone: "bad" });
+  if (line?.phase === "retry" && line.feedback?.kind === "miss") {
     const e = squaresOf(line.feedback.expected.uci);
     arrows.push({ from: e.from, to: e.to, tone: "good" });
   }
-  const yourTurn = line?.phase === "you" || line?.phase === "retry";
+  const active = !!line;
 
   return (
-    <>
-      <div className={s.toolbar}>
-        <ColorToggle value={color} onChange={switchColor} />
-        <div className={s.seg} role="group" aria-label="Mode">
-          <button type="button" aria-pressed={mode === "review"} onClick={() => switchMode("review")}>Review</button>
-          <button type="button" aria-pressed={mode === "leaks"} onClick={() => switchMode("leaks")}>Fix my leaks</button>
-        </div>
-      </div>
-
-      <div className={s.trainer} data-testid="trainer" data-phase={line?.phase ?? "idle"} data-expected-move={yourTurn && card ? card.move.uci : undefined}>
-        <div className={s.boardCol}>
-          <Chessboard
-            fen={fen}
-            orientation={color}
-            interactive={yourTurn ? color : false}
-            onMove={onMove}
-            lastMove={line?.last ?? null}
-            arrows={arrows}
-            markers={markers}
-            label="Training board"
-          />
-        </div>
-        <div>
-          <Prompt
-            line={line}
-            card={card}
-            color={color}
-            mode={mode}
-            loaded={loaded}
-            leakCount={leaks.length}
-            nextDue={nextDue(rep, states)}
-            onStart={() => start(mode)}
-            onPractice={() => start("practice")}
-            onShowMe={showMe}
-          />
-          {line && line.sans.length > 0 && <p className={`${s.crumbs} ${s.muted}`} aria-label="Moves so far">{formatLine(line.sans)}</p>}
-          <div className={s.tiles} style={{ marginTop: 14 }}>
-            <div className={s.tile}>
-              <div className={s.tileLabel}>Positions</div>
-              <div className={s.tileValue}>{rep.cards.size}</div>
-              <div className={s.tileNote}>{`${counts.learned} learned`}</div>
-            </div>
-            <div className={s.tile}>
-              <div className={s.tileLabel}>Due now</div>
-              <div className={s.tileValue} data-testid="due-count">{counts.due + counts.fresh}</div>
-              <div className={s.tileNote}>{`${counts.fresh} new`}</div>
-            </div>
-            <div className={s.tile}>
-              <div className={s.tileLabel}>Leaks</div>
-              <div className={s.tileValue}>{leaks.length}</div>
-              <div className={s.tileNote}>to fix</div>
-            </div>
+    <div className={s.trainer} data-testid="trainer" data-phase={line?.phase ?? "idle"} data-expected-move={yourTurn && card ? card.move.uci : undefined}>
+      {active && session ? (
+        <FocusBar session={session} onEnd={endSession} />
+      ) : (
+        <>
+          <SectionBar />
+          <div className={s.controls}>
+            <ColorToggle value={color} onChange={setColor} />
+            {mode !== "review" && <Link className={s.textBtn} href={trainerHref(color)}>Back to review</Link>}
           </div>
-          {mode === "leaks" && leaks.length > 0 && (
-            <section className={s.panel} aria-labelledby="leak-list" style={{ marginTop: 14 }}>
-              <h2 id="leak-list">Positions to fix</h2>
-              <p className={s.sectionLede}>Where you&apos;ve missed most in training, and where your games go worst after your move.</p>
-              <ol className={s.repList}>
-                {leaks.map((c) => (
-                  <li key={c.key}>
-                    <div className={s.repHead}>
-                      <span className={s.mono}>{formatLine(c.line) || "Start"}</span>
-                      <span className={s.repMove}>{moveLabel(c.move.san, c.ply)}</span>
-                      <span className={s.muted}>{c.move.stats.n ? `${pct(score(c.move.stats))} in ${plural(c.move.stats.n, "game")}` : "new move"}</span>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          )}
-        </div>
+        </>
+      )}
+
+      <div className={s.boardWrap}>
+        <Chessboard
+          fen={fen}
+          orientation={color}
+          interactive={yourTurn ? color : false}
+          onMove={onMove}
+          lastMove={line?.last ?? null}
+          arrows={arrows}
+          effect={effect}
+          label="Training board"
+        />
       </div>
 
-      <section className={s.section} aria-labelledby="rep-h">
-        <h2 id="rep-h" className={s.sectionTitle}>{`Your repertoire as ${cap(color)}`}</h2>
-        <p className={s.sectionLede}>
-          Positions you&apos;ve reached at least 3 times, with the move you play most there (games from the last year count double).
-          Where another move you&apos;ve played scores clearly better, it&apos;s marked; you can drill any move you&apos;ve played instead.
-        </p>
-        <RepertoireList rep={rep} states={states} clock={clock} onAdopt={(key, move) => { reset(); adopt(key, move); }} />
-      </section>
-    </>
+      {!line ? (
+        <Idle
+          mode={mode}
+          color={color}
+          loaded={loaded}
+          due={counts.due}
+          fresh={counts.fresh}
+          progress={counts.due + counts.doneToday ? counts.doneToday / (counts.due + counts.doneToday) : 1}
+          leakCount={leaks.length}
+          lineSans={lineSans}
+          onStart={() => startSession(mode)}
+        />
+      ) : line.phase === "done" && line.end === "session" && session ? (
+        <SessionDone session={session} nextDue={nextDue} color={color} onNext={nextLine} />
+      ) : (
+        <Prompt line={line} card={card} onShowMe={showMe} onNext={nextLine} nextDue={nextDue} />
+      )}
+    </div>
   );
 }
 
-function nextDue(rep: Repertoire, states: CardStates): number | null {
-  let min: number | null = null;
-  for (const c of rep.order) {
-    const st = states[c.key];
-    if (st && (min === null || st.due < min)) min = st.due;
-  }
-  return min;
+// ---------- pieces ----------
+
+function FocusBar({ session, onEnd }: { session: Session; onEnd: () => void }) {
+  const goal = session.targets.size;
+  return (
+    <div className={s.focusBar}>
+      <button type="button" className={s.iconBtn} onClick={onEnd} aria-label="End session">
+        <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+      </button>
+      <ol className={s.dots} aria-label={`${session.results.length} of ${goal} done`}>
+        {Array.from({ length: goal }, (_, i) => {
+          const r = session.results[i];
+          return <li key={i} className={r ? (r.result === "hit" ? s.dotHit : s.dotMiss) : i === session.results.length ? s.dotNext : ""} data-result={r?.result} />;
+        })}
+      </ol>
+      <span className={s.streak} aria-live="polite" aria-label={`Streak ${session.streak}`}>
+        {session.streak >= 2 && (
+          <span key={session.streak} className={s.streakPop}>
+            <svg viewBox="0 0 16 20" width="12" height="15" aria-hidden="true"><path d="M8 1c1 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-4 2-7 2 1 3 3 3 5 1-2 1-5 1-9z" fill="currentColor" /></svg>
+            {session.streak}
+          </span>
+        )}
+      </span>
+    </div>
+  );
 }
 
-function Prompt(props: {
-  line: Line | null;
-  card: Card | undefined;
+function Idle(props: {
+  mode: Mode;
   color: Color;
-  mode: "review" | "leaks";
   loaded: boolean;
+  due: number;
+  fresh: number;
+  progress: number;
   leakCount: number;
-  nextDue: number | null;
+  lineSans: string[];
   onStart: () => void;
-  onPractice: () => void;
-  onShowMe: () => void;
 }) {
-  const { line, card, color, mode, loaded, leakCount } = props;
-  const startLabel = mode === "leaks" ? "Start fixing leaks" : "Start training";
-  if (!line) {
+  const { mode, color, loaded, due, fresh, leakCount } = props;
+  if (mode === "line" || mode === "leaks") {
+    return (
+      <section className={s.hero} aria-labelledby="idle-h">
+        <div className={s.heroText}>
+          <h2 id="idle-h" className={s.heading}>{mode === "line" ? "Drill this line" : "Fix my leaks"}</h2>
+          <p className={s.ink2}>
+            {mode === "line" ? <LineText sans={props.lineSans} /> : `The ${plural(leakCount, "position")} where you go wrong most.`}
+          </p>
+        </div>
+        <button type="button" className={`${s.primaryBtn} ${s.wide}`} onClick={props.onStart} disabled={!loaded}>
+          {mode === "line" ? "Start drill" : "Start fixing leaks"}
+        </button>
+      </section>
+    );
+  }
+  return (
+    <section className={s.hero} aria-labelledby="idle-h">
+      <Ring progress={loaded ? props.progress : 0} size={116}>
+        {loaded && <span className={s.ringNum} data-testid="due-count">{due}</span>}
+        <span className={s.ringLabel}>due</span>
+      </Ring>
+      <div className={s.heroText}>
+        <h2 id="idle-h" className={s.heading}>{due ? "Today’s training" : "All caught up"}</h2>
+        <p className={s.ink2}>{due ? (fresh === due ? `${due} new to learn as ${cap(color)}.` : `${due - fresh} to review${fresh ? `, ${fresh} new` : ""}.`) : "Practise anyway, or come back tomorrow."}</p>
+      </div>
+      <button type="button" className={`${s.primaryBtn} ${s.wide}`} onClick={props.onStart} disabled={!loaded}>
+        Start training
+      </button>
+      <div className={s.quietLinks}>
+        {leakCount > 0 && <Link className={s.textBtn} href={trainerHref(color, { mode: "leaks" })}>Fix my leaks</Link>}
+        <Link className={s.textBtn} href={repertoireHref(color)}>Edit repertoire</Link>
+      </div>
+    </section>
+  );
+}
+
+function Prompt({ line, card, onShowMe, onNext, nextDue }: { line: Line; card: Card | undefined; onShowMe: () => void; onNext: () => void; nextDue: number | null }) {
+  const { phase, feedback: fb } = line;
+  if (phase === "done") {
+    const title =
+      line.end === "caught-up" ? "All caught up" : line.end === "no-leaks" ? "Nothing to fix here" : line.missed ? "Line done" : "Clean line";
+    const sub =
+      line.end === "caught-up"
+        ? `Nothing due${nextDue ? `. Next review ${relativeDay(nextDue)}` : ""}.`
+        : line.end === "no-leaks"
+          ? "No weak spots on this path right now."
+          : `${line.correct} of ${line.correct + line.missed} first time.`;
     return (
       <div className={s.prompt} role="status">
-        <strong>{mode === "leaks" ? "Fix my leaks" : "Review your repertoire"}</strong>
-        {mode === "leaks"
-          ? `Drills the ${plural(leakCount, "position")} where you go wrong most.`
-          : `Play your moves as ${cap(color)}; your opponents' replies come from your games.`}
-        <div className={s.actions} style={{ marginTop: 10 }}>
-          <button type="button" className={`${s.btn} ${s.primary}`} onClick={props.onStart} disabled={!loaded}>{startLabel}</button>
-        </div>
+        <p className={s.promptLine}>
+          <strong>{title}</strong> <span className={s.ink2}>{sub}</span>
+        </p>
+        <button type="button" className={`${s.primaryBtn} ${s.wide}`} onClick={onNext}>
+          {line.end === "line" ? "Next line" : "Practise anyway"}
+        </button>
       </div>
     );
   }
-  const { phase, feedback } = line;
-  if (phase === "done") {
-    const msg =
-      line.end === "caught-up"
-        ? `All caught up: nothing is due${props.nextDue ? `. Next review ${shortDate(props.nextDue / 1000)}` : ""}.`
-        : line.end === "no-leaks"
-          ? "No leaks to fix yet. Train more, or come back after more games."
-          : `Line complete: ${plural(line.correct, "correct move")}${line.missed ? `, ${line.missed} missed` : ""}.`;
+  if (phase === "retry" && fb?.kind === "miss") {
     return (
-      <div className={`${s.prompt} ${line.end === "complete" && !line.missed ? s.good : ""}`} role="status">
-        <strong>{line.end === "complete" ? "Line complete" : line.end === "caught-up" ? "All caught up" : "Nothing to fix"}</strong>
-        {msg}
-        <div className={s.actions} style={{ marginTop: 10 }}>
-          {line.end === "complete" && <button type="button" className={`${s.btn} ${s.primary}`} onClick={() => (line.mode === "practice" ? props.onPractice() : props.onStart())}>Next line</button>}
-          {line.end !== "complete" && <button type="button" className={`${s.btn} ${s.primary}`} onClick={props.onPractice}>Practise anyway</button>}
-        </div>
-      </div>
-    );
-  }
-  if (phase === "retry" && feedback?.kind === "miss") {
-    return (
-      <div className={`${s.prompt} ${s.bad}`} role="status">
-        <strong>Not quite</strong>
-        {`You played ${moveLabel(feedback.played, line.ply)}. Your move here is `}
-        <b data-testid="expected-move">{moveLabel(feedback.expected.san, line.ply)}</b>
-        {". Play it to continue."}
-        <div className={s.actions} style={{ marginTop: 10 }}>
-          <button type="button" className={s.btn} onClick={props.onShowMe}>Show me</button>
-        </div>
+      <div className={`${s.prompt} ${s.promptMiss}`} role="status">
+        <p className={s.promptLine}>
+          <strong>Not quite.</strong>{" "}
+          <span>
+            It&apos;s <b data-testid="expected-move" className={s.expected}><MoveText san={fb.expected.san} ply={line.ply} /></b>
+          </span>
+        </p>
+        <button type="button" className={s.textBtn} onClick={onShowMe}>Show me</button>
       </div>
     );
   }
   if (phase === "you") {
     return (
       <div className={s.prompt} role="status">
-        <strong>Your move</strong>
-        {card?.adopted ? `You're learning a new move here.` : `Play the move you usually play as ${cap(color)}.`}
-        {card && card.n > 0 && <span className={s.muted}>{` Reached in ${plural(card.n, "game")}.`}</span>}
+        <p className={s.promptLine}>
+          <strong>Your move</strong>{" "}
+          <span className={s.ink3}>{card?.adopted ? "· your new move" : card ? `· seen in ${plural(card.n, "game")}` : ""}</span>
+        </p>
+        {line.sans.length > 0 && <LineText sans={line.sans} />}
       </div>
     );
   }
   return (
-    <div className={`${s.prompt} ${feedback?.kind === "correct" ? s.good : ""}`} role="status">
-      <strong>{feedback?.kind === "correct" ? "Correct" : "Opponent to move"}</strong>
-      {feedback?.kind === "correct" ? `${moveLabel(feedback.san, line.ply - 1)} it is.` : "Picking a reply your opponents have played…"}
+    <div className={s.prompt} role="status">
+      <p className={s.promptLine}>
+        {fb?.kind === "correct" ? (
+          <>
+            <strong className={s.good}>Good.</strong> <MoveText san={fb.san} ply={fb.ply} />
+          </>
+        ) : (
+          <span className={s.ink2}>They&apos;re thinking…</span>
+        )}
+      </p>
+      {line.sans.length > 0 && <LineText sans={line.sans} />}
     </div>
   );
 }
 
-function Box({ box }: { box: number }) {
+function SessionDone({ session, nextDue, color, onNext }: { session: Session; nextDue: number | null; color: Color; onNext: () => void }) {
+  const ref = useRef<HTMLElement>(null);
+  const hits = session.results.filter((r) => r.result === "hit").length;
+  const total = session.results.length;
+  useEffect(() => {
+    feedback("complete");
+    if (ref.current) burst(ref.current, { count: hits === total ? 64 : 40 });
+    else haptic("success");
+  }, [hits, total]);
+  const parts = [
+    session.levelled ? `${plural(session.levelled, "position")} levelled up` : null,
+    session.best >= 3 ? `best streak ${session.best}` : null,
+    nextDue ? `next review ${relativeDay(nextDue)}` : null,
+  ].filter(Boolean);
   return (
-    <span className={s.box} role="img" aria-label={`Box ${box} of ${MAX_BOX}`}>
-      {Array.from({ length: MAX_BOX }, (_, i) => <i key={i} className={i < box ? s.on : ""} />)}
-    </span>
-  );
-}
-
-function RepertoireList({ rep, states, clock, onAdopt }: { rep: Repertoire; states: CardStates; clock: number; onAdopt: (key: string, move: RepMove | null) => void }) {
-  const [showAll, setShowAll] = useState(false);
-  const shown = showAll ? rep.order : rep.order.slice(0, 12);
-  return (
-    <div className={s.panel}>
-      <ul className={s.repList}>
-        {shown.map((c) => {
-          const st = states[c.key];
-          return (
-            <li key={c.key} data-position={c.key}>
-              <div className={s.repHead}>
-                <span className={s.mono}>{formatLine(c.line) || "Start"}</span>
-                <span className={s.repMove}>{moveLabel(c.move.san, c.ply)}</span>
-                <Box box={st?.box ?? 0} />
-                <span className={s.muted}>
-                  {plural(c.n, "game")}
-                  {c.move.stats.n ? ` · ${pct(score(c.move.stats))} with ${c.move.san}` : ""}
-                  {!st ? " · new" : isDue(st, clock) ? " · due" : ""}
-                </span>
-                {c.suggestion && !c.adopted && <span className={s.badge}>{`${c.suggestion.san} scores better`}</span>}
-              </div>
-              {(c.played.length > 1 || c.adopted) && (
-                <div className={s.alts}>
-                  {c.played
-                    // One-off moves are noise; keep the suggestion and the usual move whatever their count.
-                    .filter((m) => m.uci !== c.move.uci && (m.stats.n >= 2 || m === c.suggestion || m === c.usual))
-                    .slice(0, 4)
-                    .map((m) => (
-                      <button
-                        key={m.uci}
-                        type="button"
-                        className={`${s.btn} ${s.small} ${m === c.suggestion ? s.primary : ""}`}
-                        aria-label={`Drill ${moveLabel(m.san, c.ply)} after ${formatLine(c.line) || "the start"} instead`}
-                        onClick={() => onAdopt(c.key, m.uci === c.usual.uci ? null : m)}
-                      >
-                        {`Use ${m.san}`}
-                        <span className={s.faint}>{` ${pct(score(m.stats))} · ${m.stats.n}`}</span>
-                      </button>
-                    ))}
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      {rep.order.length > 12 && (
-        <button type="button" className={s.linkish} style={{ marginTop: 10 }} onClick={() => setShowAll((v) => !v)}>
-          {showAll ? "Show fewer" : `Show all ${rep.order.length} positions`}
-        </button>
-      )}
-    </div>
+    <section ref={ref} className={s.complete} role="status" aria-labelledby="done-h">
+      <Knight size={40} />
+      <p className={s.completeNum}>
+        <span className={s.display}>{hits}</span>
+        <span className={s.ink3}> of {total}</span>
+      </p>
+      <h2 id="done-h" className={s.heading}>{hits === total ? "Flawless. Session complete" : "Session complete"}</h2>
+      {parts.length > 0 && <p className={s.ink2}>{parts.join(" · ")}</p>}
+      <Link className={`${s.primaryBtn} ${s.wide}`} href={homeHref(color)}>Done</Link>
+      <button type="button" className={s.textBtn} onClick={onNext}>Next line</button>
+    </section>
   );
 }

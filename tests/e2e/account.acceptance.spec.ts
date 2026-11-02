@@ -14,10 +14,9 @@ async function link(page: Page, username: string) {
   await page.getByRole("button", { name: /^link/i }).click();
 }
 
-// The "Games" stat on the account page, e.g. <dt>Games</dt><dd>156</dd>.
+// The account page's total, e.g. data-testid="game-count" → "1,532".
 const gameCount = (page: Page, n: number) =>
-  page.getByRole("region", { name: "Imported games" })
-    .locator("dt", { hasText: /^Games$/ }).locator("+ dd").filter({ hasText: new RegExp(`^${n.toLocaleString("en-US")}$`) });
+  page.getByTestId("game-count").filter({ hasText: new RegExp(`^\\s*${n.toLocaleString("en-US")}\\s*$`) });
 
 test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(NOW);
@@ -98,6 +97,9 @@ test("the link persists across pages without refetching, and unlinking clears it
   expect(monthFetches(api)).toEqual([]);
 
   page.once("dialog", (d) => d.accept());
+  // Unlink may sit behind an "Account options" menu.
+  const options = page.getByRole("button", { name: "Account options" });
+  if (await options.count()) await options.click();
   await page.getByRole("button", { name: /unlink|disconnect/i }).click();
   const confirm = page.getByRole("button", { name: /^(unlink|yes|confirm|disconnect)/i });
   if (await confirm.count()) await confirm.first().click().catch(() => {});

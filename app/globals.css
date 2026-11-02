@@ -1,47 +1,138 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+/* The design tokens live in design-tokens.css (imported first by the root
+   layout); see DESIGN.md. This file holds the app shell and a few shared
+   primitives built on them. */
 
-/* Shared design tokens. Every page uses these; feature components may add
-   their own scoped styles on top. */
+/* Legacy names, kept as aliases onto the tokens while older screens still use them. */
 :root {
-  --bg: #15120F; --panel: #1E1A16; --panel2: #27221C; --line: rgba(201,164,106,0.20); --line2: rgba(201,164,106,0.38);
-  --ivory: #F2EADB; --muted: #A3957F; --faint: #6F6455; --brass: #C9A46A; --brassdeep: #9C7A45;
-  --light: #EAD7B0; --dark: #A87A52; --good: #7DB36A; --bad: #D0614A; --warn: #D68A3E;
-  --serif: 'Cormorant Garamond', Georgia, serif; --sans: 'Inter', system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --panel: var(--surface-1); --panel2: var(--surface-2);
+  --line: var(--hairline); --line2: var(--surface-3);
+  --ivory: var(--ink); --muted: var(--ink-2); --faint: var(--ink-3);
+  --brassdeep: var(--brass-lo); --light: var(--brass-hi); --dark: var(--sq-dark);
+  --good: var(--win); --bad: var(--loss); --warn: var(--loss);
+  --serif: var(--font-display); --sans: var(--font-ui); --mono: var(--font-plex-mono, 'IBM Plex Mono'), ui-monospace, monospace;
+
+  /* Shell metrics: what the chrome takes from the viewport. Pages pad by these. */
+  --appbar-h: 0px;
+  --chrome-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
   color-scheme: dark;
 }
+@media (min-width: 768px) {
+  :root { --appbar-h: 56px; --chrome-bottom: 0px; }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
 
 html,
 body {
   margin: 0;
   padding: 0;
-  background: #15120f;
-  color: var(--ivory);
-  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  min-height: 100dvh;
+  /* Room for the phone tab bar, so nothing ends up underneath it. */
+  padding-bottom: var(--chrome-bottom);
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* ---------- App shell ---------- */
-.appnav {
-  position: sticky; top: 0; z-index: 30;
-  display: flex; align-items: center; gap: 4px;
-  padding: calc(env(safe-area-inset-top, 0px) + 8px) 16px 8px;
-  background: rgba(21,18,15,0.92); backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--line);
+/* ---------- App shell ----------
+   Phones: a frosted bottom tab bar and no top bar.
+   Desktop: a slim frosted bar at the top with the same three links. */
+.appnav .brand, .appnav .user { display: none; }
+
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex; justify-content: space-around;
+  height: var(--chrome-bottom);
+  padding: 0 max(var(--s2), env(safe-area-inset-left, 0px)) env(safe-area-inset-bottom, 0px) max(var(--s2), env(safe-area-inset-right, 0px));
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow: 0 -1px 0 var(--hairline);
 }
-.appnav .brand { font-family: var(--serif); font-size: 20px; font-weight: 600; color: var(--ivory); text-decoration: none; margin-right: 10px; white-space: nowrap; }
-.appnav .brand span { color: var(--brass); }
-.appnav .links { display: flex; gap: 2px; overflow-x: auto; flex: 1; min-width: 0; }
-.appnav .links a { padding: 7px 11px; border-radius: 8px; font-size: 13.5px; font-weight: 600; color: var(--muted); text-decoration: none; white-space: nowrap; }
-.appnav .links a:hover { color: var(--ivory); background: rgba(255,255,255,0.03); }
-.appnav .links a[aria-current="page"] { color: var(--brass); background: var(--panel2); }
-.appnav .user { flex-shrink: 0; display: flex; align-items: center; }
-@media (max-width: 420px) { .appnav .brand .full { display: none; } }
+.tabs a {
+  position: relative; flex: 1; max-width: 140px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  min-height: var(--tap);
+  color: var(--ink-3); text-decoration: none;
+  font: 500 11px/1 var(--font-ui); letter-spacing: 0.01em;
+  transition: color var(--d-base) var(--ease-out);
+}
+.tabs a svg { width: 24px; height: 24px; transition: transform var(--d-fast) var(--ease-out); }
+.tabs a:active svg { transform: scale(0.88); }
+.tabs a[aria-current="page"] { color: var(--brass); }
+/* The active dot sits above the icon and springs in. */
+.tabs a::before {
+  content: ""; position: absolute; top: 6px; left: 50%;
+  width: 4px; height: 4px; margin-left: -2px; border-radius: var(--r-pill);
+  background: var(--brass);
+  transform: scale(0); transition: transform var(--d-slow) var(--ease-spring);
+}
+.tabs a[aria-current="page"]::before { transform: scale(1); }
+.tabs a:focus-visible { outline: none; }
+.tabs a:focus-visible svg { outline: 2px solid var(--brass); outline-offset: 4px; border-radius: var(--r-sm); }
 
-.page { max-width: 960px; margin: 0 auto; padding: 24px 16px calc(env(safe-area-inset-bottom, 0px) + 40px); }
-.page h1 { font-family: var(--serif); font-size: 34px; font-weight: 600; margin: 0 0 6px; }
-.page .lede { color: var(--muted); font-size: 15px; line-height: 1.5; margin: 0 0 24px; max-width: 60ch; }
+@media (min-width: 768px) {
+  .appnav {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; gap: var(--s5);
+    height: var(--appbar-h); padding: 0 var(--s5);
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow: 0 1px 0 var(--hairline);
+  }
+  .appnav .brand {
+    display: inline-flex; align-items: center; gap: var(--s2);
+    font: 600 21px/1 var(--font-display); color: var(--ink); text-decoration: none; white-space: nowrap;
+  }
+  .appnav .brand svg { width: 22px; height: 22px; color: var(--brass); }
+  .appnav .user { display: flex; align-items: center; margin-left: auto; }
+  .tabs {
+    position: static; height: auto; padding: 0; gap: var(--s1);
+    background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  .tabs a {
+    flex: none; max-width: none; flex-direction: row; gap: var(--s2);
+    padding: 0 var(--s3); font-size: var(--t-small); font-weight: 600; color: var(--ink-2);
+    border-radius: var(--r-pill);
+  }
+  .tabs a svg { width: 18px; height: 18px; }
+  .tabs a:hover { color: var(--ink); }
+  .tabs a[aria-current="page"] { color: var(--brass); }
+  .tabs a::before { top: auto; bottom: 4px; }
+  .tabs a.hometab { display: none; }
+}
 
-.hubgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.hubcard { display: block; padding: 18px; border-radius: 12px; border: 1px solid var(--line2); background: linear-gradient(180deg, var(--panel2), var(--panel)); color: var(--ivory); text-decoration: none; }
-.hubcard:hover { border-color: var(--brass); }
-.hubcard h2 { font-family: var(--serif); font-size: 24px; font-weight: 600; margin: 0 0 6px; color: var(--brass); }
-.hubcard p { margin: 0; font-size: 13.5px; line-height: 1.5; color: #D8CDB9; }
+/* ---------- Pages ---------- */
+.page {
+  max-width: 960px; margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + var(--s5)) var(--gutter) var(--s7);
+}
+@media (min-width: 768px) { .page { padding-top: var(--s6); } }
+/* Focused screens: one column, the same on a phone and a desktop. */
+.page.focus { max-width: calc(var(--column) + 2 * var(--gutter)); }
+.page h1 { font: 600 var(--t-title)/1.1 var(--font-display); margin: 0 0 var(--s2); }
+.page .lede { color: var(--ink-2); font-size: 15px; line-height: 1.5; margin: 0 0 var(--s5); max-width: 60ch; }
+
+/* Only on phones (the desktop bar shows the same thing). */
+@media (min-width: 768px) { .phone-only { display: none !important; } }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ---------- Shared motion ----------
+   Entrances: give an element class="rise" and style="--i: n" to stagger it. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+}
+.rise { animation: rise var(--d-slow) var(--ease-out) both; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; }
+  .tabs a, .tabs a svg, .tabs a::before { transition: none; }
+}

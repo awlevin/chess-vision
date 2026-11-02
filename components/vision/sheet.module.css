@@ -1,0 +1,44 @@
+.sheet {
+  /* In the top layer, above the tab bar. */
+  position: fixed;
+  inset: auto 0 0 0;
+  width: 100%;
+  max-width: var(--column);
+  max-height: 86dvh;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r) var(--r) 0 0;
+  background: var(--surface-1);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.sheet[open] { animation: up var(--d-slow) var(--ease-out); }
+.sheet[open][data-closing] { animation: down var(--d-base) var(--ease-out) forwards; }
+.sheet::backdrop { background: var(--scrim); animation: fade var(--d-slow) var(--ease-out); }
+.sheet[data-closing]::backdrop { animation: fade var(--d-base) var(--ease-out) reverse forwards; }
+
+@keyframes up { from { transform: translateY(100%); } }
+@keyframes down { to { transform: translateY(100%); } }
+@keyframes fade { from { opacity: 0; } }
+
+.body {
+  padding: var(--s2) var(--gutter) calc(env(safe-area-inset-bottom, 0px) + var(--s5));
+}
+.grabber {
+  width: 36px;
+  height: 4px;
+  margin: 0 auto var(--s4);
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+}
+.title {
+  margin: 0 0 var(--s4);
+  font: 600 var(--t-heading)/1.1 var(--font-display);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet[open], .sheet[open][data-closing], .sheet::backdrop, .sheet[data-closing]::backdrop { animation: none; }
+}

@@ -1,0 +1,135 @@
+/* The hub: an editorial, type-first page. A greeting set large, one line of
+   momentum, then a numbered index of places to go. No boxes. */
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--tap);
+  margin-bottom: var(--s6);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font: 600 var(--t-small)/1 var(--font-ui);
+  color: var(--ink-3);
+}
+.brand svg { width: 20px; height: 20px; color: var(--brass); }
+/* The desktop bar already shows the brand. */
+@media (min-width: 768px) { .top { display: none; } }
+
+/* ---------- Greeting ---------- */
+.head {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity var(--d-slow) var(--ease-out), transform var(--d-slow) var(--ease-out);
+}
+.head[data-ready] { opacity: 1; transform: none; }
+.hello {
+  margin: 0;
+  font: 600 var(--t-display)/1.02 var(--font-display);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.name { color: var(--brass); }
+.momentum {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 24px;
+  margin: var(--s4) 0 0;
+  font-size: 15px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.count { color: var(--ink); font-weight: 600; }
+.busy { color: var(--ink-3); }
+.avatar {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-pill);
+  object-fit: cover;
+  background: var(--surface-2);
+}
+.initial {
+  display: inline-grid;
+  place-items: center;
+  font: 600 13px/1 var(--font-ui);
+  color: var(--brass);
+}
+
+/* ---------- The index ---------- */
+.index {
+  display: grid;
+  margin: var(--s7) calc(-1 * var(--s3)) var(--s6);
+}
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px 1fr 68px;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s5) var(--s3);
+  border-radius: var(--r);
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color var(--d-base) var(--ease-out), transform var(--d-fast) var(--ease-out);
+}
+/* Hairline dividers between rows, inset to the text. */
+.row + .row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--s3);
+  right: var(--s3);
+  height: 1px;
+  background: var(--hairline);
+  transition: opacity var(--d-base) var(--ease-out);
+}
+.row:hover, .row:focus-visible { background: var(--surface-1); }
+.row:hover::before, .row:hover + .row::before,
+.row:focus-visible::before, .row:focus-visible + .row::before { opacity: 0; }
+.row:active { transform: scale(0.985); background: var(--surface-2); }
+.row:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: -2px; }
+
+.num {
+  align-self: start;
+  padding-top: 9px;
+  font: 500 var(--t-caption)/1 var(--font-num);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.words { display: grid; gap: 6px; min-width: 0; }
+.title {
+  font: 600 var(--t-title)/1 var(--font-display);
+  transition: color var(--d-base) var(--ease-out);
+}
+.row:hover .title { color: var(--brass-hi); }
+.blurb { font-size: var(--t-small); line-height: 1.4; color: var(--ink-2); }
+
+/* ---------- Illustrations ---------- */
+.art { width: 68px; height: 68px; overflow: visible; }
+.light { fill: var(--surface-3); }
+.dark { fill: var(--surface-2); }
+.target { transform-box: fill-box; transform-origin: center; transition: transform var(--d-slow) var(--ease-spring); }
+.target rect { fill: var(--brass); }
+.target text { font: italic 600 14px var(--font-display); fill: var(--on-brass); }
+.row:hover .target, .row:active .target { transform: scale(1.14); }
+
+.side { stroke: var(--surface-3); stroke-width: 2; }
+.main { stroke: var(--brass); stroke-width: 2.25; stroke-dasharray: 1; stroke-dashoffset: 0; }
+.node { fill: var(--brass); }
+.nodeSide { fill: var(--surface-3); }
+.nodeEnd { fill: var(--brass-hi); transform-box: fill-box; transform-origin: center; transition: transform var(--d-slow) var(--ease-spring); }
+.row:hover .main { animation: draw var(--d-slow) var(--ease-out); }
+.row:hover .nodeEnd, .row:active .nodeEnd { transform: scale(1.35); }
+@keyframes draw { from { stroke-dashoffset: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .head, .row, .row::before, .title, .target, .nodeEnd { transition: none; }
+  .head { transform: none; }
+  .row:hover .main { animation: none; }
+}
