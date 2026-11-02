@@ -24,6 +24,8 @@ interface Entry {
   timer: ReturnType<typeof setTimeout> | null;
   dirty: boolean;
   started: boolean;
+  /** Changes made before the stored value was read, applied on top of it. */
+  pending: ((current: unknown) => unknown)[];
 }
 
 const entries = new Map<string, Entry>();
@@ -32,7 +34,7 @@ const WRITE_DELAY = 400;
 function entry(key: string): Entry {
   let e = entries.get(key);
   if (!e) {
-    e = { value: undefined, loaded: false, snapshot: { value: undefined, loaded: false }, listeners: new Set(), timer: null, dirty: false, started: false };
+    e = { value: undefined, loaded: false, snapshot: { value: undefined, loaded: false }, listeners: new Set(), timer: null, dirty: false, started: false, pending: [] };
     entries.set(key, e);
   }
   return e;
@@ -72,17 +74,20 @@ function load(key: string) {
   e.started = true;
   installStorage();
   hookFlush();
-  const storage = window.storage;
-  if (!storage) {
+  const finish = () => {
     e.loaded = true;
-    emit(e);
-    return;
-  }
+    if (e.pending.length) {
+      for (const update of e.pending) e.value = update(e.value);
+      e.pending = [];
+      markDirty(key, e);
+    } else emit(e);
+  };
+  const storage = window.storage;
+  if (!storage) return finish();
   storage
     .get(key)
     .then((rec) => {
-      // A write that happened before the read finished wins.
-      if (!e.dirty && rec?.value != null) {
+      if (rec?.value != null) {
         try {
           e.value = JSON.parse(rec.value);
         } catch {
@@ -91,10 +96,14 @@ function load(key: string) {
       }
     })
     .catch(() => {})
-    .finally(() => {
-      e.loaded = true;
-      emit(e);
-    });
+    .finally(finish);
+}
+
+function markDirty(key: string, e: Entry) {
+  e.dirty = true;
+  emit(e);
+  if (e.timer) clearTimeout(e.timer);
+  e.timer = setTimeout(() => flush(key), WRITE_DELAY);
 }
 
 const SERVER_SNAPSHOT = { value: undefined, loaded: false };
@@ -121,13 +130,20 @@ export function usePersistent<T>(
 
   const set = useCallback(
     (next: T | ((prev: T) => T)) => {
+      const update = (current: unknown) => {
+        const prev = isValid(current) ? current : fallback;
+        return typeof next === "function" ? (next as (p: T) => T)(prev) : next;
+      };
       const en = entry(key);
-      const prev = isValid(en.value) ? en.value : fallback;
-      en.value = typeof next === "function" ? (next as (p: T) => T)(prev) : next;
-      en.dirty = true;
-      emit(en);
-      if (en.timer) clearTimeout(en.timer);
-      en.timer = setTimeout(() => flush(key), WRITE_DELAY);
+      if (!en.loaded) {
+        // Apply once the stored value is in, so an early change (say, adopting
+        // a move straight after the page opens) can't wipe what was saved.
+        en.pending.push(update);
+        load(key);
+        return;
+      }
+      en.value = update(en.value);
+      markDirty(key, en);
     },
     [key, fallback, isValid],
   );

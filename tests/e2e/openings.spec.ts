@@ -72,6 +72,21 @@ test("the report names openings and calls out leaks", async ({ page }) => {
   await expect(page.locator("[data-leak]").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Where you leave theory" })).toBeVisible();
 
+  // A move-choice leak's better move can be adopted for the trainer, and it sticks.
+  for (const c of ["As White", "As Black"]) {
+    await page.getByRole("group", { name: "Colour" }).getByRole("button", { name: c }).click();
+    const drill = page.getByRole("button", { name: /^Drill .+ instead$/ }).first();
+    if (!(await drill.isVisible())) continue;
+    const label = (await drill.innerText()).match(/^Drill (\S+) instead$/)![1];
+    await drill.click();
+    await expect(page).toHaveURL(/\/openings\/train\?color=/);
+    await expect(page.locator("[data-position]").filter({ hasText: label }).first()).toBeVisible();
+    await page.reload();
+    await expect(page.locator("[data-position]").filter({ hasText: label }).first()).toBeVisible();
+    await page.goto("/openings");
+    break;
+  }
+
   // Filters narrow the games.
   const count = page.getByTestId("filtered-count");
   await expect(count).toHaveText(/\d+ games/);
