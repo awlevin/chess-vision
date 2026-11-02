@@ -1,105 +1,217 @@
-/* Styles for the reusable games components. Uses the tokens in app/globals.css. */
+/* The reusable games components: link prompt, import progress, sync line.
+   Built only from the tokens in app/design-tokens.css (see DESIGN.md):
+   tonal surfaces instead of borders, pills for buttons, brass for action. */
 
-.panel {
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid var(--line2);
-  background: linear-gradient(180deg, var(--panel2), var(--panel));
+/* ---------- Surfaces and type ---------- */
+.card {
+  padding: var(--s5) 20px;
+  border-radius: var(--r);
+  background: var(--surface-1);
 }
-.panel h2, .panel h3 {
-  font-family: var(--serif);
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--brass);
-  margin: 0 0 6px;
+.title {
+  margin: 0 0 var(--s1);
+  font: 600 var(--t-heading)/1.15 var(--font-display);
+  color: var(--ink);
 }
-.panel p {
-  margin: 0 0 14px;
-  font-size: 14.5px;
-  line-height: 1.5;
-  color: #D8CDB9;
-  max-width: 60ch;
+.line {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink-2);
 }
-.panel p:last-child { margin-bottom: 0; }
+.error, .line.error { color: var(--loss); }
 
+/* ---------- Buttons ---------- */
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 8px 16px;
-  border-radius: 9px;
-  border: 1px solid var(--brass);
+  gap: var(--s2);
+  min-height: 48px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: var(--r-pill);
   background: var(--brass);
-  color: #1A150F;
-  font: 600 14px/1.2 var(--sans);
+  color: var(--on-brass);
+  font: 600 15px/1 var(--font-ui);
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
+  transition: background-color var(--d-fast) var(--ease-out), transform var(--d-fast) var(--ease-out);
 }
-.button:hover { background: var(--light); border-color: var(--light); }
-.button:focus-visible, .linkButton:focus-visible { outline: 2px solid var(--ivory); outline-offset: 2px; }
-.button:disabled { opacity: 0.55; cursor: default; }
-.button.quiet { background: transparent; color: var(--brass); border-color: var(--line2); }
-.button.quiet:hover:not(:disabled) { border-color: var(--brass); background: rgba(201,164,106,0.08); }
+.button:hover { background: var(--brass-hi); }
+.button:active:not(:disabled) { transform: scale(0.97); }
+.button:disabled { opacity: 0.5; cursor: default; }
+.button.quiet { background: var(--surface-2); color: var(--ink); }
+.button.quiet:hover:not(:disabled) { background: var(--surface-3); }
+.button:focus-visible, .textButton:focus-visible, .iconButton:focus-visible {
+  outline: 2px solid var(--brass-hi);
+  outline-offset: 3px;
+}
 
-.linkButton {
-  padding: 0;
+.textButton {
+  min-height: var(--tap);
+  padding: 0 var(--s1);
   border: 0;
   background: none;
   color: var(--brass);
-  font: inherit;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  font: 600 var(--t-small)/1 var(--font-ui);
   cursor: pointer;
 }
-.linkButton:disabled { color: var(--faint); cursor: default; text-decoration: none; }
+.textButton:disabled { color: var(--ink-3); cursor: default; }
 
-.progress { display: grid; gap: 8px; }
-.progress .label { font-size: 14px; color: var(--ivory); }
-.bar {
-  appearance: none;
-  width: 100%;
-  height: 6px;
+/* Round icon button (refresh, options). 44px, or 32px with a 44px hit area. */
+.iconButton {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
   border: 0;
-  border-radius: 3px;
-  background: var(--panel2);
-  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color var(--d-fast) var(--ease-out), color var(--d-fast) var(--ease-out), transform var(--d-fast) var(--ease-out);
 }
-.bar::-webkit-progress-bar { background: rgba(255,255,255,0.06); border-radius: 3px; }
-.bar::-webkit-progress-value { background: var(--brass); border-radius: 3px; transition: width 0.3s; }
-.bar::-moz-progress-bar { background: var(--brass); border-radius: 3px; }
+.iconButton svg { width: 22px; height: 22px; }
+.iconButton:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.iconButton:active:not(:disabled) { transform: scale(0.9); }
+.iconButton:disabled { cursor: default; }
+.iconButton.sm { width: 32px; height: 32px; background: transparent; }
+.iconButton.sm svg { width: 18px; height: 18px; }
+.iconButton.sm::after { content: ""; position: absolute; inset: -6px; }
+.spinning { color: var(--brass); }
+.spinning svg { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-.error, .panel .error { color: #F0B3A6; }
-.error strong { color: var(--bad); }
+/* ---------- Link prompt and empty states: the knight, a line, one button ---------- */
+.prompt {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  grid-template-areas: "knight text" "button button";
+  align-items: center;
+  gap: var(--s4) var(--s4);
+}
+.prompt .knight { grid-area: knight; }
+.promptText { grid-area: text; min-width: 0; }
+.prompt > .button { grid-area: button; width: 100%; }
 
+.knight { display: block; width: 48px; height: 48px; color: var(--brass); }
+/* The sitting knight settles in once, with a little spring. */
+.sitting { animation: settle var(--d-slow) var(--ease-spring) both; transform-origin: 50% 100%; }
+@keyframes settle {
+  from { opacity: 0; transform: translateY(-10px) rotate(-8deg); }
+}
+
+/* ---------- Import progress: the knight hops along a rank ---------- */
+.progress { display: grid; gap: var(--s2); }
+.rail {
+  --p: 0%;
+  position: relative;
+  height: 40px;
+}
+.rail::before, .fill {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 6px;
+  border-radius: var(--r-pill);
+}
+/* An empty rank: alternating squares in two tones. */
+.rail::before {
+  right: 0;
+  background: repeating-linear-gradient(90deg, var(--surface-2) 0 14px, var(--surface-3) 14px 28px);
+}
+.fill {
+  width: var(--p);
+  background: linear-gradient(90deg, var(--brass-lo), var(--brass));
+  transition: width var(--d-slow) var(--ease-out);
+}
+.rider {
+  position: absolute;
+  bottom: 8px;
+  left: clamp(0px, calc(var(--p) - 14px), calc(100% - 28px));
+  width: 28px;
+  height: 28px;
+  transition: left var(--d-slow) var(--ease-out);
+}
+.hopper {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 28px;
+  height: 28px;
+  color: var(--brass-hi);
+  transform-origin: 50% 100%;
+  animation: hop 1s var(--ease-out) infinite;
+}
+.shadow {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: -3px;
+  height: 3px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.45);
+  animation: hopShadow 1s var(--ease-out) infinite;
+}
+/* Up, a step across, and down: a small L. Squash on landing. */
+@keyframes hop {
+  0%, 100% { transform: translate(0, 0) scale(1.08, 0.9); }
+  12% { transform: translate(0, 0) scale(1, 1); }
+  42% { transform: translate(0, -14px) rotate(-10deg); }
+  62% { transform: translate(4px, -14px) rotate(4deg); }
+  86% { transform: translate(0, 0) rotate(0deg); }
+}
+@keyframes hopShadow {
+  0%, 12%, 86%, 100% { transform: scaleX(1); opacity: 1; }
+  42%, 62% { transform: scaleX(0.5); opacity: 0.4; }
+}
+.label { font-size: var(--t-small); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* ---------- One-line sync status ---------- */
 .status {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--muted);
+  gap: var(--s1) var(--s2);
+  min-height: 32px;
+  font-size: var(--t-small);
+  line-height: 1.4;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
 }
+.status.progress { display: grid; }
 .status .text { min-width: 0; }
-.status .bar { flex-basis: 100%; }
-.status a { color: var(--brass); font-weight: 600; }
-
+.status a { color: var(--brass); font-weight: 600; text-decoration: none; }
 .dot {
   display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 7px;
-  border-radius: 50%;
-  vertical-align: 1px;
-  background: var(--good);
+  width: 6px;
+  height: 6px;
+  margin-right: var(--s2);
+  border-radius: var(--r-pill);
+  vertical-align: 2px;
+  background: var(--win);
 }
-.dot.busy { background: var(--brass); animation: pulse 1.2s ease-in-out infinite; }
-.dot.bad { background: var(--bad); }
-@keyframes pulse { 50% { opacity: 0.35; } }
+.dot.bad { background: var(--loss); }
+
+/* ---------- Loading ---------- */
+.loading { display: grid; gap: var(--s3); }
+.skeleton {
+  display: block;
+  height: 14px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%) 0 0 / 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.skeleton.short { width: 55%; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .dot.busy { animation: none; }
-  .bar::-webkit-progress-value { transition: none; }
+  .hopper, .shadow, .skeleton, .spinning svg, .sitting { animation: none; }
+  .fill, .rider, .button, .iconButton { transition: none; }
 }

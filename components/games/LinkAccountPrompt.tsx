@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { KnightIcon } from "@/components/icons";
 import styles from "./games.module.css";
 
 export interface LinkAccountPromptProps {
   /** Heading text. */
   title?: string;
-  /** Body text explaining what linking unlocks here. */
+  /** One short line saying what linking unlocks here. */
   children?: React.ReactNode;
   /** Heading level, so the prompt fits the page outline. Defaults to 2. */
   headingLevel?: 2 | 3;
@@ -12,20 +13,23 @@ export interface LinkAccountPromptProps {
 }
 
 /**
- * Empty-state card for features that need the player's own games: "Link your
- * Chess.com account to see this", with a link to /account.
+ * Empty state for features that need the player's own games: the knight,
+ * one line, and a single button to /account.
  */
 export function LinkAccountPrompt({
-  title = "Link your Chess.com account",
-  children = "This uses your own games. Link your Chess.com username to import them. It takes a few seconds and needs no password.",
+  title = "Bring your games",
+  children = "Link your Chess.com username. No password needed.",
   headingLevel = 2,
   className,
 }: LinkAccountPromptProps) {
   const H = `h${headingLevel}` as const;
   return (
-    <section className={[styles.panel, className].filter(Boolean).join(" ")}>
-      <H>{title}</H>
-      <p>{children}</p>
+    <section className={[styles.card, styles.prompt, className].filter(Boolean).join(" ")}>
+      <KnightIcon className={`${styles.knight} ${styles.sitting}`} />
+      <div className={styles.promptText}>
+        <H className={styles.title}>{title}</H>
+        <p className={styles.line}>{children}</p>
+      </div>
       <Link href="/account" className={styles.button}>Link Chess.com account</Link>
     </section>
   );
