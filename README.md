@@ -431,7 +431,24 @@ The end-to-end tests drive the production build in local mode. `tests/e2e/chessc
 fakes api.chess.com from `tests/fixtures/chesscom-testplayer.json` (user `testplayer`,
 156 real games over 4 months). `tests/e2e/account.spec.ts` covers linking, import,
 incremental refresh, a new device, stale auto-refresh, partial failure and unlinking,
-and it checks which requests reach Chess.com.
+and it checks which requests reach Chess.com. `tests/e2e/openings.spec.ts` covers the
+explorer, report, trainer and board.
+
+The `*.acceptance.spec.ts` files check the app against an independent reading of the
+same fixture: `tests/e2e/fixture-stats.ts` replays the raw games with chess.js and never
+imports app code. They check that every explorer number and every claimed leak matches
+the raw games. They also check that the trainer only asks for moves you really played
+and replies only with moves your real opponents played.
+
+`tests/e2e/live-chesscom.spec.ts` imports a real account from the real API. It is
+skipped unless you opt in:
+
+```sh
+LIVE_CHESSCOM_USER=awlevin npx playwright test live --project=desktop
+```
+
+`reuseExistingServer` is on outside CI, so stop any `next start` left on the test
+port first. Otherwise the tests run against that old build.
 
 Next.js renders a hidden route announcer with `role="alert"`, so scope alert queries
 to the page: `page.getByRole("main").getByRole("alert")`.

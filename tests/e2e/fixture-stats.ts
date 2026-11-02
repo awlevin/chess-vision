@@ -36,13 +36,18 @@ export const epd = (fen: string) => fen.split(" ").slice(0, 4).join(" ");
 
 /** Every move the player made from this position in the fixture, with counts. */
 export function playerMovesFrom(fen: string): Map<string, number> {
+  return movesFrom(fen, "player");
+}
+
+/** Every move made from this position in the fixture by the player or their opponents. */
+export function movesFrom(fen: string, by: "player" | "opponent"): Map<string, number> {
   const want = epd(fen);
   const out = new Map<string, number>();
   for (const g of FIXTURE_GAMES) {
     const chess = new Chess();
     for (let i = 0; i < Math.min(g.sans.length, 30); i++) {
       const mover = chess.turn() === "w" ? "white" : "black";
-      if (mover === g.color && epd(chess.fen()) === want) {
+      if ((mover === g.color) === (by === "player") && epd(chess.fen()) === want) {
         out.set(g.sans[i], (out.get(g.sans[i]) ?? 0) + 1);
       }
       chess.move(g.sans[i]);
