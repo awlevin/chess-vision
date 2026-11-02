@@ -3,6 +3,7 @@ import { ClerkProvider, UserButton } from "@clerk/nextjs";
 import { CLOUD } from "@/lib/cloud";
 import { APP_NAME, APP_TAGLINE } from "@/lib/site";
 import AppNav from "@/components/AppNav";
+import AppProviders from "@/components/AppProviders";
 import "./globals.css";
 
 const TITLE = APP_NAME;
@@ -36,8 +37,10 @@ export default function RootLayout({
     <html lang="en">
       <body>
         {/* All routes are protected in cloud mode, so a user is always signed in here. */}
-        <AppNav user={CLOUD ? <UserButton /> : undefined} />
-        {children}
+        <AppProviders>
+          <AppNav user={CLOUD ? <UserButton /> : undefined} />
+          {children}
+        </AppProviders>
       </body>
     </html>
   );

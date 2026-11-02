@@ -1,0 +1,105 @@
+/* Styles for the reusable games components. Uses the tokens in app/globals.css. */
+
+.panel {
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--line2);
+  background: linear-gradient(180deg, var(--panel2), var(--panel));
+}
+.panel h2, .panel h3 {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--brass);
+  margin: 0 0 6px;
+}
+.panel p {
+  margin: 0 0 14px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: #D8CDB9;
+  max-width: 60ch;
+}
+.panel p:last-child { margin-bottom: 0; }
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 9px;
+  border: 1px solid var(--brass);
+  background: var(--brass);
+  color: #1A150F;
+  font: 600 14px/1.2 var(--sans);
+  text-decoration: none;
+  cursor: pointer;
+}
+.button:hover { background: var(--light); border-color: var(--light); }
+.button:focus-visible, .linkButton:focus-visible { outline: 2px solid var(--ivory); outline-offset: 2px; }
+.button:disabled { opacity: 0.55; cursor: default; }
+.button.quiet { background: transparent; color: var(--brass); border-color: var(--line2); }
+.button.quiet:hover:not(:disabled) { border-color: var(--brass); background: rgba(201,164,106,0.08); }
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brass);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.linkButton:disabled { color: var(--faint); cursor: default; text-decoration: none; }
+
+.progress { display: grid; gap: 8px; }
+.progress .label { font-size: 14px; color: var(--ivory); }
+.bar {
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--panel2);
+  overflow: hidden;
+}
+.bar::-webkit-progress-bar { background: rgba(255,255,255,0.06); border-radius: 3px; }
+.bar::-webkit-progress-value { background: var(--brass); border-radius: 3px; transition: width 0.3s; }
+.bar::-moz-progress-bar { background: var(--brass); border-radius: 3px; }
+
+.error, .panel .error { color: #F0B3A6; }
+.error strong { color: var(--bad); }
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.status .text { min-width: 0; }
+.status .bar { flex-basis: 100%; }
+.status a { color: var(--brass); font-weight: 600; }
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--good);
+}
+.dot.busy { background: var(--brass); animation: pulse 1.2s ease-in-out infinite; }
+.dot.bad { background: var(--bad); }
+@keyframes pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .dot.busy { animation: none; }
+  .bar::-webkit-progress-value { transition: none; }
+}

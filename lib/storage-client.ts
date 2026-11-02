@@ -1,4 +1,6 @@
-// Installs the window.storage async key-value API the drill expects.
+// Installs the window.storage async key-value API that the drills and the
+// linked Chess.com account use. components/AppProviders.tsx installs it for
+// every page.
 //
 // In cloud mode it is backed by the authenticated /api/storage routes, and
 // on first load a key the server lacks is seeded once from this browser's
@@ -87,6 +89,13 @@ const cloudBackend: KVStorage = {
     const res = await fetch(endpoint(key), { method: "DELETE" });
     if (!res.ok && res.status !== 404) {
       throw new Error(`storage.delete(${key}) failed: ${res.status}`);
+    }
+    // Drop any local-mode copy too, or the next get() would 404 and re-seed
+    // the deleted value from it.
+    try {
+      window.localStorage.removeItem(LOCAL_PREFIX + key);
+    } catch {
+      // localStorage may be unavailable; nothing to re-seed from then.
     }
   },
 

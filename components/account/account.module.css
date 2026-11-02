@@ -1,0 +1,85 @@
+/* /account page. Reuses .panel and .button from components/games/games.module.css. */
+
+.stack { display: grid; gap: 14px; }
+.loading { min-height: 120px; }
+
+.linkForm { max-width: 560px; }
+.label { display: block; margin: 0 0 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; color: var(--ivory); }
+.inputRow { display: flex; gap: 8px; flex-wrap: wrap; }
+.input {
+  flex: 1 1 200px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line2);
+  background: var(--bg);
+  color: var(--ivory);
+  font: 500 16px/1.2 var(--sans); /* 16px keeps iOS from zooming on focus */
+}
+.input::placeholder { color: var(--faint); }
+.input:focus { outline: 2px solid var(--brass); outline-offset: 1px; border-color: var(--brass); }
+.input[aria-invalid="true"] { border-color: var(--bad); }
+.formStatus { min-height: 22px; margin-top: 10px; }
+.formStatus p { margin: 0; font-size: 14px; }
+
+.profile { display: flex; align-items: center; gap: 16px; }
+.avatar {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  border: 1px solid var(--line2);
+  object-fit: cover;
+  background: var(--panel2);
+}
+.initial {
+  display: grid;
+  place-items: center;
+  font: 600 32px/1 var(--serif);
+  color: var(--brass);
+}
+.who { min-width: 0; }
+.who h2 { margin: 0; overflow-wrap: anywhere; }
+.realName { margin: 0 0 4px !important; color: var(--muted) !important; }
+.external { font-size: 13.5px; font-weight: 600; color: var(--brass); }
+
+.syncBox { margin: 4px 0 16px; padding: 12px 14px; border-radius: 10px; background: rgba(0,0,0,0.18); border: 1px solid var(--line); }
+.syncError { border-color: rgba(208,97,74,0.5); }
+.syncError p { margin: 0; }
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+.tiles > div {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.18);
+  border: 1px solid var(--line);
+}
+.tiles dt { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.tiles dd { margin: 2px 0 0; font: 600 24px/1.2 var(--mono); color: var(--ivory); font-variant-numeric: tabular-nums; }
+.tiles .total { border-color: var(--line2); }
+.tiles .total dd { color: var(--brass); }
+
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 0 0 18px; }
+.facts dt { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 2px 0 0; font-size: 15px; color: var(--ivory); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 64ch; }
+
+.srOnly {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+@media (max-width: 560px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tiles .total { grid-column: 1 / -1; }
+  .facts { grid-template-columns: 1fr; }
+  .actions > * { flex: 1 1 0; }
+}
