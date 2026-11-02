@@ -47,13 +47,17 @@ export interface LinkedAccount {
   username: string;
   /** Display-cased username from the profile. */
   displayName: string;
+  /** The player's real name, when their profile shows one. */
+  name?: string;
   avatar?: string;
   linkedAt: number;
 }
 
 export type SyncState =
   | { status: "idle" }
+  /** `done`/`total` count months fetched. `total` is 0 while the month list is still being checked. */
   | { status: "syncing"; done: number; total: number }
+  /** The last sync failed, fully or in part. `message` is ready to show; games fetched before the failure are kept. */
   | { status: "error"; message: string };
 
 export interface GamesState {
