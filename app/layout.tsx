@@ -4,6 +4,7 @@ import { CLOUD } from "@/lib/cloud";
 import { APP_NAME, APP_TAGLINE } from "@/lib/site";
 import AppNav from "@/components/AppNav";
 import AppProviders from "@/components/AppProviders";
+import "./design-tokens.css";
 import "./globals.css";
 
 const TITLE = APP_NAME;
