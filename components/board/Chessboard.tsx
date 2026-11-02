@@ -9,12 +9,18 @@
 // pen, via pointer events) or the keyboard (arrow keys to move between
 // squares, Enter or Space to pick up and put down).
 //
+// It sits in a wooden frame with a faint grain. Pieces slide in for the last
+// move; a capture's victim fades under the slider, and a castling rook slides
+// too. `effect` plays a one-off brass glow on a square, or a clay flash with a
+// small shake of the board. `onSwipe` reports horizontal swipes that don't
+// start on a movable piece. Motion is skipped under prefers-reduced-motion.
+//
 // Test hooks: the root has data-fen, data-orientation and data-turn; each
 // square has data-square and, when occupied, data-piece ("wP", "bK", ...),
 // plus data-selected, data-target, data-last, data-marker and data-check.
 // Arrows are <g data-arrow="e2e4">.
 import { Chess, type Move } from "chess.js";
-import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import styles from "./Chessboard.module.css";
 import { PieceSvg } from "./pieces";
 import type { BoardArrow, BoardColor, BoardMarker, BoardMove, PieceCode, PromotionPiece } from "./types";
@@ -40,7 +46,23 @@ export interface ChessboardProps {
   coordinates?: boolean;
   /** Accessible name for the board. Default "Chessboard". */
   label?: string;
+  /**
+   * A one-off effect, replayed whenever `id` changes: "glow" pulses a square
+   * brass (a correct move); "miss" flashes it clay and shakes the board.
+   */
+  effect?: BoardEffect | null;
+  /** Horizontal swipes that don't start on a piece you can move. */
+  onSwipe?: (direction: "left" | "right") => void;
+  /** The wooden frame. Default true; off for thumbnails. */
+  framed?: boolean;
   className?: string;
+}
+
+export interface BoardEffect {
+  kind: "glow" | "miss";
+  square: string;
+  /** Change it to replay the effect. */
+  id: number;
 }
 
 const FILES = "abcdefgh";
@@ -94,10 +116,14 @@ export function Chessboard({
   markers = [],
   coordinates = true,
   label = "Chessboard",
+  effect = null,
+  onSwipe,
+  framed = true,
   className,
 }: ChessboardProps) {
   const descId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
+  const swipeRef = useRef<{ pointerId: number; x0: number; y0: number } | null>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ from: string; pointerId: number; x0: number; y0: number; active: boolean; wasSelected: boolean } | null>(null);
 
@@ -109,6 +135,12 @@ export function Chessboard({
     }
   }, [fen]);
   const pieces = useMemo(() => placement(fen), [fen]);
+  // The position before this one, to show what a move captured.
+  const [history, setHistory] = useState<{ fen: string; pieces: Map<string, PieceCode>; before: Map<string, PieceCode> | null }>(
+    () => ({ fen, pieces, before: null }),
+  );
+  if (history.fen !== fen) setHistory({ fen, pieces, before: history.pieces });
+  const before = history.fen === fen ? history.before : history.pieces;
   const squares = useMemo(() => displaySquares(orientation), [orientation]);
   const turn: BoardColor = fen.split(" ")[1] === "b" ? "black" : "white";
   const usable = !!onMove && interactive !== false;
@@ -145,6 +177,24 @@ export function Chessboard({
 
   const select = (sq: string | null) => setSel(sq ? { fen, sq } : null);
 
+  // A wrong move nudges the whole board: 2px, side to side, then still.
+  const missId = effect?.kind === "miss" ? effect.id : null;
+  useEffect(() => {
+    const el = rootRef.current;
+    if (missId === null || !el?.animate || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    el.animate(
+      [
+        { transform: "none" },
+        { transform: "translateX(-2px)" },
+        { transform: "translateX(2px)" },
+        { transform: "translateX(-2px)" },
+        { transform: "translateX(1px)" },
+        { transform: "none" },
+      ],
+      { duration: 280, easing: "ease-in-out" },
+    );
+  }, [missId]);
+
   function commit(m: Move, viaDrag: boolean) {
     setSel(null);
     setPromo(null);
@@ -180,9 +230,13 @@ export function Chessboard({
   }
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
-    if (!canMove || promotion || (e.pointerType === "mouse" && e.button !== 0)) return;
+    if (promotion || (e.pointerType === "mouse" && e.button !== 0)) return;
     const sq = squareAt(e.clientX, e.clientY);
     if (!sq) return;
+    if (onSwipe && !(canMove && (legal.has(sq) || (selected && targets.has(sq))))) {
+      swipeRef.current = { pointerId: e.pointerId, x0: e.clientX, y0: e.clientY };
+    }
+    if (!canMove) return;
     if (selected && targets.has(sq)) {
       attempt(selected, sq, false);
       return;
@@ -211,7 +265,16 @@ export function Chessboard({
     moveGhost(e.clientX, e.clientY);
   }
 
+  function endSwipe(e: PointerEvent<HTMLDivElement>, cancelled: boolean) {
+    const sw = swipeRef.current;
+    if (!sw || sw.pointerId !== e.pointerId) return;
+    swipeRef.current = null;
+    const dx = e.clientX - sw.x0, dy = e.clientY - sw.y0;
+    if (!cancelled && Math.abs(dx) > 40 && Math.abs(dx) > 1.5 * Math.abs(dy)) onSwipe?.(dx < 0 ? "left" : "right");
+  }
+
   function endDrag(e: PointerEvent<HTMLDivElement>, cancelled: boolean) {
+    endSwipe(e, cancelled);
     const d = dragRef.current;
     if (!d || d.pointerId !== e.pointerId) return;
     dragRef.current = null;
@@ -255,22 +318,34 @@ export function Chessboard({
   }
 
   const lastUci = lastMove ? lastMove.from + lastMove.to : null;
-  const animate = !!lastMove && pieces.has(lastMove.to) && dropped?.slice(0, 4) !== lastUci;
-  const slide = animate && lastMove
-    ? (() => {
-        const a = displayCoords(lastMove.from, orientation), b = displayCoords(lastMove.to, orientation);
-        return { "--dx": `${(a.col - b.col) * 100}%`, "--dy": `${(a.row - b.row) * 100}%` } as CSSProperties;
-      })()
-    : undefined;
+  const moved = lastMove ? pieces.get(lastMove.to) : undefined;
+  // True when the last move is what turned the previous position into this one.
+  const fresh = !!lastMove && !!moved && !!before && (before.get(lastMove.from) === moved || (moved[1] !== "P" && before.get(lastMove.from)?.[1] === "P"));
+  const slides = new Map<string, CSSProperties>();
+  const offset = (from: string, to: string) => {
+    const a = displayCoords(from, orientation), b = displayCoords(to, orientation);
+    return { "--dx": `${(a.col - b.col) * 100}%`, "--dy": `${(a.row - b.row) * 100}%` } as CSSProperties;
+  };
+  // Slide the moved piece in (unless it was dropped there)...
+  if (lastMove && moved && dropped?.slice(0, 4) !== lastUci) slides.set(lastMove.to, offset(lastMove.from, lastMove.to));
+  // ...and a castling rook with it.
+  if (lastMove && moved?.[1] === "K" && fresh && Math.abs(lastMove.from.charCodeAt(0) - lastMove.to.charCodeAt(0)) === 2) {
+    const rank = lastMove.to[1], kingside = lastMove.to[0] === "g";
+    const rookTo = `${kingside ? "f" : "d"}${rank}`;
+    if (pieces.get(rookTo)?.[1] === "R") slides.set(rookTo, offset(`${kingside ? "h" : "a"}${rank}`, rookTo));
+  }
+  // What the move took, fading out under the piece that took it.
+  const victim = lastMove && fresh ? before!.get(lastMove.to) : undefined;
+  const captured = victim && moved && victim[0] !== moved[0] ? victim : undefined;
   const tabStop = focusSq ?? squares[56];
 
-  return (
+  const board = (
     <div
       ref={rootRef}
       role="group"
       aria-label={label}
       aria-describedby={descId}
-      className={[styles.board, canMove ? styles.movable : "", className ?? ""].join(" ")}
+      className={[styles.board, canMove ? styles.movable : onSwipe ? styles.swipeable : "", framed ? "" : className ?? ""].join(" ")}
       data-fen={fen}
       data-orientation={orientation}
       data-turn={turn}
@@ -283,6 +358,7 @@ export function Chessboard({
       <p id={descId} className={styles.srOnly}>
         {`${turn === "white" ? "White" : "Black"} to move. FEN: ${fen}`}
       </p>
+      <span className={styles.grain} aria-hidden="true" />
       {squares.map((sq, i) => {
         const piece = pieces.get(sq);
         const row = Math.floor(i / 8), col = i % 8;
@@ -303,14 +379,22 @@ export function Chessboard({
           <>
             {coordinates && col === 0 && <span className={styles.rank} aria-hidden="true">{sq[1]}</span>}
             {coordinates && row === 7 && <span className={styles.file} aria-hidden="true">{sq[0]}</span>}
+            {captured && sq === lastMove?.to && (
+              <span key={`x-${fen}`} className={`${styles.piece} ${styles.captured}`} aria-hidden="true">
+                <PieceSvg piece={captured} />
+              </span>
+            )}
             {piece && (
               <span
                 key={`${fen}-${sq}`}
-                className={[styles.piece, drag?.from === sq ? styles.lifted : "", animate && sq === lastMove?.to ? styles.slide : ""].join(" ")}
-                style={animate && sq === lastMove?.to ? slide : undefined}
+                className={[styles.piece, drag?.from === sq ? styles.lifted : "", slides.has(sq) ? styles.slide : ""].join(" ")}
+                style={slides.get(sq)}
               >
                 <PieceSvg piece={piece} />
               </span>
+            )}
+            {effect && effect.square === sq && (
+              <span key={`fx-${effect.id}`} className={effect.kind === "glow" ? styles.glow : styles.flash} aria-hidden="true" />
             )}
           </>
         );
@@ -393,4 +477,6 @@ export function Chessboard({
       )}
     </div>
   );
+  if (!framed) return board;
+  return <div className={[styles.frame, className ?? ""].join(" ")}>{board}</div>;
 }

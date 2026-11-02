@@ -1,8 +1,14 @@
 import type { Metadata } from "next";
-import Report from "@/components/openings/Report";
+import { Suspense } from "react";
+import Home from "@/components/openings/Home";
 
 export const metadata: Metadata = { title: "Openings" };
 
+// The screens read the colour from the URL, so they render on the client.
 export default function OpeningsPage() {
-  return <Report />;
+  return (
+    <Suspense>
+      <Home />
+    </Suspense>
+  );
 }

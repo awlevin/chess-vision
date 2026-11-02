@@ -233,9 +233,8 @@ function colorReport(all: ParsedGame[], book: Book, color: Color): ColorReport {
     color,
     stats,
     families: familyRows,
-    leaks: [...openingLeaks(familyRows, baseline, color), ...moveLeaks(games, color)]
-      .sort((a, z) => z.severity - a.severity)
-      .slice(0, 8),
+    // Every leak, worst first; the home screen shows the top one, /openings/leaks all of them.
+    leaks: [...openingLeaks(familyRows, baseline, color), ...moveLeaks(games, color)].sort((a, z) => z.severity - a.severity),
     exits: exitRows,
     theory,
   };
