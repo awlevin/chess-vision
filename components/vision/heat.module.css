@@ -1,0 +1,61 @@
+.heat { display: flex; flex-direction: column; gap: var(--s3); }
+
+/* A quiet segmented control: pills on a tonal track. */
+.metrics {
+  display: flex;
+  gap: var(--s1);
+  padding: var(--s1);
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  align-self: flex-start;
+}
+.metrics button {
+  min-height: 36px;
+  padding: 0 var(--s4);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-3);
+  font: 600 var(--t-caption)/1 var(--font-ui);
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease-out), color var(--d-fast) var(--ease-out);
+}
+.metrics button[aria-pressed="true"] { background: var(--surface-3); color: var(--ink); }
+.metrics button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 14px repeat(8, 1fr);
+  gap: 2px;
+}
+.strips { display: flex; flex-direction: column; gap: var(--s3); }
+.strip { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+
+.cell {
+  --tint: var(--brass);
+  aspect-ratio: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  background-image: linear-gradient(color-mix(in srgb, var(--tint) var(--heat, 0%), transparent), color-mix(in srgb, var(--tint) var(--heat, 0%), transparent));
+  color: var(--ink-2);
+  font: 600 10px/1 var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+.cell[data-dark] { background-color: var(--surface-1); }
+.cell[data-tone="bad"] { --tint: var(--loss); }
+.cell[data-hot] { color: var(--on-brass); }
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 2px;
+  font: italic 600 14px/1 var(--font-display);
+  font-feature-settings: "lnum" 1;
+  color: var(--ink-3);
+}
+
+.caption { margin: 0; font-size: var(--t-caption); color: var(--ink-3); }

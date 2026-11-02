@@ -1,0 +1,248 @@
+/* The Vision drill screen. Mobile first (390 wide); desktop is the same
+   column, centred. Tokens only; see DESIGN.md. */
+
+.page {
+  max-width: var(--column);
+  margin: 0 auto;
+  /* Room below for the phone tab bar and the safe area. */
+  padding: var(--s2) var(--gutter) calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + var(--s5));
+  color: var(--ink);
+  font-family: var(--font-ui);
+  -webkit-tap-highlight-color: transparent;
+}
+:where(.page) button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+
+/* ---- header: the drill chip and one quiet settings button ---- */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+.drillChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--tap);
+  min-width: 0;
+  padding: 0 var(--s3) 0 var(--s4);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease-out), transform var(--d-fast) var(--ease-out);
+}
+.drillChip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drillChip svg { flex: none; color: var(--ink-3); }
+.iconBtn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease-out), color var(--d-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  .drillChip:hover { background: var(--surface-2); }
+  .iconBtn:hover { background: var(--surface-1); color: var(--ink); }
+}
+.drillChip:active, .iconBtn:active { transform: scale(0.96); }
+
+/* ---- the drill ---- */
+.drill {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+/* The prompt: an oversized serif glyph, never a plaque. */
+.prompt {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s4);
+  height: 84px;
+}
+.glyph {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 88px;
+  line-height: 0.82;
+  letter-spacing: -0.01em;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum" 1;
+  color: var(--ink);
+  white-space: nowrap;
+  animation: glyphIn var(--d-base) var(--ease-out) both;
+  transition: color var(--d-fast) var(--ease-out);
+}
+.blank { color: var(--ink-3); }
+.prompt[data-feedback="correct"] .glyph { color: var(--brass-hi); animation: bump var(--d-slow) var(--ease-spring); }
+.prompt[data-feedback="miss"] .glyph { color: var(--win); }
+
+.ready { display: flex; flex-direction: column; gap: var(--s2); padding-bottom: 2px; animation: glyphIn var(--d-slow) var(--ease-out) both; }
+.readyTitle {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--t-display);
+  line-height: 0.9;
+  font-feature-settings: "lnum" 1;
+}
+.readySub { font-size: var(--t-small); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s1);
+  padding-bottom: 2px;
+  text-align: right;
+}
+.review { font-size: var(--t-caption); font-weight: 600; color: var(--brass); animation: pop var(--d-base) var(--ease-spring) both; }
+.timer {
+  font-family: var(--font-num);
+  font-size: var(--t-heading);
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.timer[data-running] { color: var(--ink-3); }
+.unit { margin-left: 1px; font-size: var(--t-small); color: var(--ink-3); }
+.streak {
+  font-size: var(--t-caption);
+  font-weight: 600;
+  color: var(--brass);
+  font-variant-numeric: tabular-nums;
+  animation: pop var(--d-slow) var(--ease-spring) both;
+}
+.streak[data-milestone] { color: var(--brass-hi); text-shadow: 0 0 12px color-mix(in srgb, var(--brass-hi) 60%, transparent); }
+
+/* The round, as a slim strip of 20. */
+.progress {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 3px;
+  height: 4px;
+}
+.progress span { border-radius: var(--r-pill); background: var(--surface-2); }
+.progress [data-current] { background: var(--surface-3); }
+.progress [data-result] { animation: fill var(--d-slow) var(--ease-spring) both; transform-origin: left; }
+.progress [data-result="hit"] { background: var(--brass); }
+.progress [data-result="miss"] { background: var(--loss); }
+.drill[data-phase="ready"] .progress { opacity: 0.5; }
+
+/* ---- the thumb zone, under the board ---- */
+.thumb {
+  min-height: 108px;
+  padding-top: var(--s2);
+}
+.enter { animation: fadeUp var(--d-slow) var(--ease-out) both; }
+
+.primary {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 var(--s5);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--brass);
+  color: var(--on-brass);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease-out), transform var(--d-fast) var(--ease-out);
+}
+@media (hover: hover) { .primary:hover:not(:disabled) { background: var(--brass-hi); } }
+.primary:active:not(:disabled) { transform: scale(0.97); }
+.primary:disabled { opacity: 0.5; cursor: default; }
+
+.textBtn {
+  display: block;
+  min-height: var(--tap);
+  margin: var(--s2) auto 0;
+  padding: 0 var(--s4);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) { .textBtn:hover { color: var(--ink); } }
+
+.primary:focus-visible, .textBtn:focus-visible, .drillChip:focus-visible, .iconBtn:focus-visible, .key:focus-visible {
+  outline: 2px solid var(--brass-hi);
+  outline-offset: 2px;
+}
+
+.miss p {
+  margin: 0 0 var(--s3);
+  text-align: center;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+.miss b {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--t-heading);
+  font-weight: 600;
+  color: var(--loss);
+}
+.missBtns { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: var(--s2); }
+.missBtns .textBtn { margin: 0; }
+
+/* The naming keypad: files, then ranks. */
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px 5px;
+  animation: fadeUp var(--d-slow) var(--ease-out) both;
+}
+.key {
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 0 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  font-feature-settings: "lnum" 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background var(--d-fast) var(--ease-out), transform var(--d-fast) var(--ease-out), color var(--d-fast) var(--ease-out);
+}
+@media (hover: hover) { .key:hover:not(:disabled) { background: var(--surface-2); } }
+.key:active:not(:disabled) { transform: scale(0.93); background: var(--surface-3); }
+.keypad .key[aria-pressed="true"]:not(:disabled) { background: var(--brass); color: var(--on-brass); }
+.key:disabled { color: var(--ink-3); cursor: default; }
+
+@keyframes glyphIn { from { opacity: 0; transform: translateY(6px); } }
+@keyframes bump { 40% { transform: scale(1.06); } }
+@keyframes pop { from { opacity: 0; transform: scale(0.7); } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } }
+@keyframes fill { from { transform: scaleX(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .glyph, .ready, .review, .streak, .enter, .keypad, .progress [data-result],
+  .prompt[data-feedback="correct"] .glyph { animation: none; }
+  .drillChip, .iconBtn, .primary, .key { transition: none; }
+}

@@ -1,0 +1,182 @@
+/* The drill board: the one crafted object on the screen. A walnut frame with
+   depth and a faint grain, and flat squares inside it. */
+
+.frame {
+  --frame: 6px;
+  position: relative;
+  padding: var(--frame);
+  border-radius: var(--r-sm);
+  background:
+    radial-gradient(120% 70% at 20% 0%, var(--hairline), transparent 60%),
+    linear-gradient(150deg, var(--surface-3), var(--surface-1));
+  box-shadow: var(--shadow-board);
+  transition: filter var(--d-slow) var(--ease-out), transform var(--d-slow) var(--ease-out);
+}
+/* Before a round the board rests, dimmed. Begin lifts it into the light. */
+.frame[data-dim] {
+  filter: brightness(0.7) saturate(0.85);
+  transform: scale(0.985);
+}
+
+.board {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  aspect-ratio: 1;
+  width: 100%;
+  /* Concentric with the frame. */
+  border-radius: calc(var(--r-sm) - var(--frame));
+  overflow: hidden;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.sq {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  cursor: default;
+}
+.lt { background: var(--sq-light); }
+.dk { background: var(--sq-dark); }
+.board[data-pickable] .sq { cursor: pointer; }
+@media (hover: hover) {
+  .board[data-pickable] .sq:hover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--ink) 16%, transparent);
+  }
+}
+
+/* Edge labels, in the colour of the other square. */
+.rank, .file {
+  position: absolute;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+}
+.rank { top: 3px; left: 4px; }
+.file { bottom: 3px; right: 4px; }
+.lt .rank, .lt .file { color: var(--sq-dark); }
+.dk .rank, .dk .file { color: var(--sq-light); }
+
+/* ---- marks ---- */
+.sq[data-mark]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.sq[data-mark="target"]::before {
+  background: var(--sq-hl);
+  box-shadow: inset 0 0 0 3px var(--brass-hi);
+  animation: markIn var(--d-base) var(--ease-out) both;
+}
+.sq[data-mark="line"]::before {
+  background: color-mix(in srgb, var(--brass-hi) 78%, transparent);
+  animation: markIn var(--d-base) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 18ms);
+}
+.sq[data-mark="from"]::before {
+  background: color-mix(in srgb, var(--brass) 22%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--brass-lo) 80%, transparent);
+}
+.sq[data-mark="answer"]::before {
+  background: color-mix(in srgb, var(--win) 72%, transparent);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--win) 100%, var(--bg) 30%);
+  animation: markIn var(--d-base) var(--ease-spring) both;
+}
+.sq[data-mark="wrong"]::before {
+  background: color-mix(in srgb, var(--loss) 82%, transparent);
+}
+@keyframes markIn {
+  from { opacity: 0; transform: scale(0.82); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---- the piece ---- */
+.piece {
+  position: absolute;
+  z-index: 1;
+  width: 12.5%;
+  height: 12.5%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: land var(--d-base) var(--ease-spring) both;
+}
+.piece svg {
+  width: 88%;
+  height: 88%;
+  filter: drop-shadow(0 2px 2px var(--scrim));
+}
+.piece[data-slide] {
+  animation: none;
+  transition: left var(--d-base) var(--ease-out), top var(--d-base) var(--ease-out);
+}
+@keyframes land {
+  from { transform: translateY(-14%) scale(0.86); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* ---- the glow: a hit pulses brass once, a miss flashes clay ---- */
+.pulse {
+  position: absolute;
+  z-index: 2;
+  width: 12.5%;
+  height: 12.5%;
+  pointer-events: none;
+  opacity: 0;
+  animation: glow 560ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 22ms);
+}
+.pulse[data-tone="good"] {
+  background: color-mix(in srgb, var(--brass-hi) 85%, transparent);
+  box-shadow: 0 0 0 0 var(--brass-hi), 0 0 22px 6px color-mix(in srgb, var(--brass-hi) 70%, transparent);
+}
+.pulse[data-tone="bad"] {
+  background: color-mix(in srgb, var(--loss) 90%, transparent);
+  animation-name: flash;
+  animation-duration: 420ms;
+}
+@keyframes glow {
+  0% { opacity: 0; transform: scale(0.9); }
+  18% { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+@keyframes flash {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---- Begin: a brass sheen sweeps across the board once ---- */
+.sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 30%, color-mix(in srgb, var(--brass-hi) 38%, transparent) 50%, transparent 70%);
+  transform: translateX(-110%);
+  animation: sweep 720ms var(--ease-out) forwards;
+}
+@keyframes sweep {
+  to { transform: translateX(110%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame, .piece[data-slide] { transition: none; }
+  .sq[data-mark]::before, .piece { animation: none; }
+  .pulse { animation: none; opacity: 0; }
+  .pulse[data-tone="bad"] { animation: none; }
+  .sheen { display: none; }
+}

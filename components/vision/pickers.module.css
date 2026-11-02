@@ -1,0 +1,95 @@
+/* ---- the drill list ---- */
+.list { display: flex; flex-direction: column; gap: var(--s1); }
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--s3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease-out);
+}
+@media (hover: hover) { .row:hover { background: var(--surface-2); } }
+.row[aria-current] { background: var(--surface-2); }
+.row[aria-current] .name { color: var(--brass-hi); }
+.row:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 2px; }
+.text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.name { font-size: var(--t-body); font-weight: 600; }
+.sub { font-size: var(--t-small); color: var(--ink-3); }
+
+.art { flex: none; width: 40px; height: 40px; border-radius: var(--r-sm); }
+.lt { fill: var(--sq-light); }
+.dk { fill: var(--sq-dark); }
+.fill { fill: var(--brass-hi); }
+.ring { fill: none; stroke: var(--on-brass); stroke-width: 1.5; }
+.dot { fill: var(--on-brass); }
+.path { fill: none; stroke: var(--on-brass); stroke-width: 1.6; stroke-dasharray: 2 2; }
+
+/* ---- settings ---- */
+.settings { display: flex; flex-direction: column; gap: var(--s3); }
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  min-height: 52px;
+}
+.label { font-size: 15px; color: var(--ink-2); }
+
+.seg {
+  display: flex;
+  gap: var(--s1);
+  padding: var(--s1);
+  border-radius: var(--r-pill);
+  background: var(--bg);
+}
+.seg button {
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  min-height: 36px;
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-3);
+  font: 600 var(--t-small)/1 var(--font-ui);
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease-out), color var(--d-fast) var(--ease-out);
+}
+.seg button[aria-pressed="true"] { background: var(--surface-3); color: var(--ink); }
+.seg button:focus-visible, .switch:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 2px; }
+.piece { width: 26px; height: 26px; opacity: 0.55; }
+.seg button[aria-pressed="true"] .piece { opacity: 1; }
+
+.switch {
+  position: relative;
+  width: 52px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  cursor: pointer;
+  transition: background var(--d-base) var(--ease-out);
+}
+.switch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-pill);
+  background: var(--ink-2);
+  transition: transform var(--d-base) var(--ease-spring), background var(--d-base) var(--ease-out);
+}
+.switch[aria-checked="true"] { background: var(--brass); }
+.switch[aria-checked="true"] span { transform: translateX(20px); background: var(--on-brass); }
