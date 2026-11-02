@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { APP_NAME, SECTIONS } from "@/lib/site";
-import { AccountIcon, KnightIcon, OpeningsIcon, VisionIcon } from "@/components/icons";
+import { AccountIcon, HomeIcon, KnightIcon, OpeningsIcon, VisionIcon } from "@/components/icons";
 
 const ICONS = { "/vision": VisionIcon, "/openings": OpeningsIcon, "/account": AccountIcon } as const;
 
@@ -18,6 +18,11 @@ export default function AppNav({ user }: { user?: React.ReactNode }) {
     <header className="appnav">
       <Link href="/" className="brand"><KnightIcon />{APP_NAME}</Link>
       <nav className="tabs" aria-label="Sections">
+        {/* Phones have no top bar, so Home is a tab there; desktop uses the brand. */}
+        <Link href="/" className="hometab" aria-current={pathname === "/" ? "page" : undefined}>
+          <HomeIcon />
+          <span>Home</span>
+        </Link>
         {SECTIONS.map((s) => {
           const current = pathname === s.href || pathname.startsWith(s.href + "/");
           const Icon = ICONS[s.href];

@@ -13,6 +13,17 @@ const line = {
   "aria-hidden": true,
 } as const;
 
+/** Home: a small 2x2 board. */
+export function HomeIcon(props: IconProps) {
+  return (
+    <svg {...line} {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="2.5" />
+      <path d="M12 4v16M4 12h16" />
+      <path d="M4.8 4.8h6.4v6.4H4.8zM12.8 12.8h6.4v6.4h-6.4z" fill="currentColor" stroke="none" opacity="0.35" />
+    </svg>
+  );
+}
+
 /** Vision: an eye over a square. */
 export function VisionIcon(props: IconProps) {
   return (

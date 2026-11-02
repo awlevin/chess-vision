@@ -104,6 +104,7 @@ body {
   .tabs a:hover { color: var(--ink); }
   .tabs a[aria-current="page"] { color: var(--brass); }
   .tabs a::before { top: auto; bottom: 4px; }
+  .tabs a.hometab { display: none; }
 }
 
 /* ---------- Pages ---------- */
