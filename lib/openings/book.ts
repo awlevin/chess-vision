@@ -23,6 +23,10 @@ export interface Book {
   named: Map<string, BookEntry>;
   /** Every position on any named line ("known theory"). */
   theory: Set<string>;
+  /** How many named lines pass through each theory position: a rough measure of how main a line is. */
+  lines: Map<string, number>;
+  /** Theory positions some named line continues from. Elsewhere the book has simply run out. */
+  continues: Set<string>;
   /** Number of named lines. */
   size: number;
 }
@@ -37,6 +41,8 @@ export function splitName(name: string): { family: string; variation: string | n
 export function buildBook(rows: Row[]): Book {
   const named = new Map<string, BookEntry>();
   const theory = new Set<string>([START_KEY]);
+  const lines = new Map<string, number>();
+  const continues = new Set<string>();
   // Book lines share long prefixes; replay each distinct prefix once.
   const prefixKeys = new Map<string, string>([["", START_KEY]]);
   for (const [eco, name, sans] of rows) {
@@ -44,7 +50,9 @@ export function buildBook(rows: Row[]): Book {
     let prefix = "";
     let pos: FastPosition | null = null;
     let key = START_KEY;
+    lines.set(key, (lines.get(key) ?? 0) + 1);
     for (let i = 0; i < moves.length; i++) {
+      continues.add(key);
       const next = prefix ? `${prefix} ${moves[i]}` : moves[i];
       const known = prefixKeys.get(next);
       if (known) {
@@ -57,6 +65,7 @@ export function buildBook(rows: Row[]): Book {
         prefixKeys.set(next, key);
         theory.add(key);
       }
+      lines.set(key, (lines.get(key) ?? 0) + 1);
       prefix = next;
     }
     // Several lines can name one position (transpositions); keep the shortest line's name.
@@ -65,7 +74,7 @@ export function buildBook(rows: Row[]): Book {
       named.set(key, { eco, name, ...splitName(name), line: moves });
     }
   }
-  return { named, theory, size: rows.length };
+  return { named, theory, lines, continues, size: rows.length };
 }
 
 let loading: Promise<Book> | null = null;
@@ -76,7 +85,7 @@ export function loadBook(): Promise<Book> {
   return loading;
 }
 
-/** Legal moves from `fen` that stay on a named book line, as SAN. */
+/** Legal moves from `fen` that stay on a named book line, as SAN, most-branching lines first. */
 export function bookMoves(book: Book, fen: string): string[] {
   let chess: Chess;
   try {
@@ -84,12 +93,14 @@ export function bookMoves(book: Book, fen: string): string[] {
   } catch {
     return [];
   }
-  const out: string[] = [];
+  const out: { san: string; weight: number }[] = [];
   for (const san of chess.moves()) {
     const pos = FastPosition.fromFen(fen);
-    if (pos.play(san) && book.theory.has(pos.key())) out.push(san);
+    if (!pos.play(san)) continue;
+    const key = pos.key();
+    if (book.theory.has(key)) out.push({ san, weight: book.lines.get(key) ?? 0 });
   }
-  return out;
+  return out.sort((a, z) => z.weight - a.weight).map((m) => m.san);
 }
 
 /** The deepest named opening along a sequence of position keys (index into keys), or -1. */

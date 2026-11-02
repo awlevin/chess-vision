@@ -12,6 +12,7 @@ import { formatLine, moveLabel, pct, plural } from "@/lib/openings/format";
 import { explorerHref, trainerHref } from "@/lib/openings/links";
 import { buildReport, MIN_OPENING_GAMES, MIN_POSITION_GAMES, type ColorReport, type Leak, type OpeningRow, type TheoryExit } from "@/lib/openings/report";
 import { score } from "@/lib/openings/stats";
+import { EngineNote, EngineToggle, useEngineSetting } from "./EngineNote";
 import { useOpenings } from "./OpeningsProvider";
 import { ColorToggle, FiltersBar, ResultBar, ResultDots, Score, Trend, styles as s } from "./ui";
 import { useRepertoireStore } from "./useRepertoireStore";
@@ -92,10 +93,14 @@ function ColorSection({ r, book }: { r: ColorReport; book: Book }) {
       </section>
 
       <section className={s.section} aria-labelledby="theory-h">
-        <h2 id="theory-h" className={s.sectionTitle}>Where you leave theory</h2>
+        <div className={s.sectionHead}>
+          <h2 id="theory-h" className={s.sectionTitle}>Where you leave theory</h2>
+          <EngineToggle />
+        </div>
         <p className={s.sectionLede}>
           The first move of yours that isn&apos;t on a named line in the opening book, most common first.
-          You left book first in {plural(theory.youLeft, "game")}, your opponent in {plural(theory.opponentLeft, "game")}.
+          You left book first in {plural(theory.youLeft, "game")}, your opponent in {plural(theory.opponentLeft, "game")}
+          {theory.bookEnded ? `, and the book simply ran out in ${plural(theory.bookEnded, "game")}` : ""}.
         </p>
         {r.exits.length === 0 ? (
           <p className={s.muted}>You never left book before your opponent here.</p>
@@ -112,22 +117,34 @@ function ColorSection({ r, book }: { r: ColorReport; book: Book }) {
 function LeakCard({ leak }: { leak: Leak }) {
   const router = useRouter();
   const { adopt } = useRepertoireStore(leak.color);
+  const [engineOn] = useEngineSetting();
   const better = leak.better;
+  const drill = (move: { uci: string; san: string }) => {
+    adopt(leak.positionKey!, move);
+    router.push(trainerHref(leak.color));
+  };
   return (
     <li className={`${s.leak} ${leak.kind === "move" ? s.leakMove : ""}`} data-leak={leak.kind}>
       <div className={s.leakKind}>{leak.kind === "move" ? "Move choice" : "Opening"}</div>
       <p className={s.leakTitle}>{leak.title}</p>
       <p className={s.leakDetail}>{leak.detail}</p>
+      {engineOn && leak.positionKey && leak.played && (
+        <EngineNote
+          fen={fenFromKey(leak.positionKey, leak.line.length)}
+          ply={leak.line.length}
+          color={leak.color}
+          playedUci={leak.played.uci}
+          playedSan={leak.played.san}
+          onAdopt={drill}
+        />
+      )}
       <div className={s.actions}>
         <Link className={`${s.btn} ${s.small}`} href={explorerHref(leak.color, leak.line)}>Explore</Link>
         {better && leak.positionKey && (
           <button
             type="button"
             className={`${s.btn} ${s.small} ${s.primary}`}
-            onClick={() => {
-              adopt(leak.positionKey!, better);
-              router.push(trainerHref(leak.color));
-            }}
+            onClick={() => drill(better)}
           >
             {`Drill ${moveLabel(better.san, leak.line.length)} instead`}
           </button>
@@ -158,7 +175,7 @@ function OpeningsTable({ rows, baseline, color }: { rows: OpeningRow[]; baseline
               <th scope="col" className={s.num}>Games</th>
               <th scope="col">Results</th>
               <th scope="col" className={s.num}>Score</th>
-              <th scope="col">Last 10</th>
+              <th scope="col" className={s.wide}>Last 10</th>
             </tr>
           </thead>
           <tbody>
@@ -194,7 +211,7 @@ function FamilyRows({ row, baseline, color, open, onToggle }: { row: OpeningRow;
         <td className={s.num}>{row.stats.n}</td>
         <td className={s.barCell}><ResultBar stats={row.stats} /></td>
         <td className={s.num}><Score stats={row.stats} baseline={baseline} /></td>
-        <td style={{ whiteSpace: "nowrap" }}>
+        <td className={s.wide} style={{ whiteSpace: "nowrap" }}>
           <ResultDots results={row.recent} /> <Trend trend={row.trend} />
         </td>
       </tr>
@@ -208,7 +225,7 @@ function FamilyRows({ row, baseline, color, open, onToggle }: { row: OpeningRow;
             <td className={s.num}>{v.stats.n}</td>
             <td className={s.barCell}><ResultBar stats={v.stats} /></td>
             <td className={s.num}><Score stats={v.stats} baseline={baseline} /></td>
-            <td style={{ whiteSpace: "nowrap" }}><ResultDots results={v.recent} /></td>
+            <td className={s.wide} style={{ whiteSpace: "nowrap" }}><ResultDots results={v.recent} /></td>
           </tr>
         ))}
     </>
@@ -216,7 +233,11 @@ function FamilyRows({ row, baseline, color, open, onToggle }: { row: OpeningRow;
 }
 
 function ExitCard({ exit, book, color }: { exit: TheoryExit; book: Book; color: Color }) {
-  const options = useMemo(() => bookMoves(book, fenFromKey(exit.key, exit.ply)), [book, exit]);
+  const router = useRouter();
+  const { adopt } = useRepertoireStore(color);
+  const [engineOn] = useEngineSetting();
+  const fen = fenFromKey(exit.key, exit.ply);
+  const options = useMemo(() => bookMoves(book, fen), [book, fen]);
   const where = exit.line.length ? formatLine(exit.line) : "the start";
   return (
     <li className={s.exit}>
@@ -232,6 +253,19 @@ function ExitCard({ exit, book, color }: { exit: TheoryExit; book: Book; color: 
           ? `Book moves after ${where}: ${options.slice(0, 6).map((m) => moveLabel(m, exit.ply)).join(", ")}${options.length > 6 ? ", …" : ""}`
           : "No named book move continues from here."}
       </div>
+      {engineOn && (
+        <EngineNote
+          fen={fen}
+          ply={exit.ply}
+          color={color}
+          playedUci={exit.uci}
+          playedSan={exit.san}
+          onAdopt={(m) => {
+            adopt(exit.key, m);
+            router.push(trainerHref(color));
+          }}
+        />
+      )}
       <div className={s.actions} style={{ marginTop: 8 }}>
         <Link className={`${s.btn} ${s.small}`} href={explorerHref(color, exit.line)}>Explore</Link>
       </div>

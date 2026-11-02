@@ -85,7 +85,174 @@ The heat map also shows under the board before each round.
 
 ## Openings
 
-_This section is written with the Openings feature._
+Everything here is worked out in the browser from your imported games. There is no
+server-side analysis. Only standard chess from the normal starting position counts;
+variants and custom starts are skipped. The three pages share one set of filters (time
+control, period, rated only):
+
+| Page | Route | What it does |
+|---|---|---|
+| Report | `/openings` | Your named openings per colour, the leaks worth fixing, and where you leave known theory |
+| Explorer | `/openings/explorer` | Your games as a move tree, with games, results and score for every next move |
+| Train | `/openings/train` | Play your side of the lines you actually reach, with spaced repetition |
+
+### The opening book
+
+Opening names come from the [Lichess chess-openings](https://github.com/lichess-org/chess-openings)
+dataset (CC0, 3,865 named lines). It is bundled as `lib/openings/book-data.json`
+(about 50 KB gzipped, loaded only on these pages). `scripts/build-opening-book.mjs`
+regenerates it. The browser replays every line once and indexes it **by position**
+(FEN without the move counters), so a game that transposes into a named line still
+gets its name. "Known theory" is every position on any named line. A game's opening
+is the deepest named position it reaches.
+
+Reading 1,500 games with chess.js would take seconds (about 90 µs a move), so
+`lib/chess/fast.ts` replays SAN about 40 times faster. It was checked against chess.js
+on 85,000 real plies and produces the same FENs, including chess.js's rule of only
+printing an en passant square when the capture is legal. chess.js still checks every
+move you make on a board. Games are read in slices of about 12 ms with a progress bar,
+so the page never blocks. Each game is read once (its first 24 plies) and cached.
+
+### Explorer
+
+All your games of one colour, merged move by move from the starting position, up to
+move 8 (16 plies). For each next move you get the number of games, how often it was
+played, wins, draws and losses, and your score (wins plus half your draws). You also
+get the opening name, whether you're still in book, arrows for the most common moves,
+and your latest games from that position with links to Chess.com. Click a move in the
+table or play it on the board to go deeper. Back, Forward (along the most played move)
+and the move list step around, and so do ← and →. The line is kept in the URL
+(`?color=black&moves=e2e4-d7d5`), so any position can be linked to.
+
+### Report: leaks and theory
+
+- **Your openings**: families (the part of the name before the colon) with their
+  variations, each with games, results, score, the last 10 results, and a trend. The
+  trend is the score in your last 10 games minus the score before them, shown once
+  there are 15 or more games.
+- **Opening leaks**: a family or variation with at least 8 games that scores at least
+  10 points below your average for that colour, and still 5 below after shrinking it
+  towards your average as if you had played 6 more games at your average. That stops a
+  3-game streak from looking like a disaster. A variation of a family that is already a
+  leak is listed only if it is at least another 10 points worse.
+- **Move-choice leaks**: positions where it's your move, merged across transpositions,
+  in the first 16 plies with at least 10 games. A position is a leak when the move you
+  play most (4+ games) scores at least 15 points below another move you've played
+  (4+ games), and still 6 below after shrinking both towards your score in that
+  position. For example: "After 1.e4 e5
+  2.Nf3 Nc6 you play 3.d4 most often and score worst with it". **Drill X instead**
+  adopts the better move in the trainer.
+- Leaks are ranked by roughly the points they cost (games × score gap). The top 8 per
+  colour are shown.
+- **Where you leave theory**: in each game, the first move that reaches a position on
+  no named line. If that move was yours, it is grouped by position and move, and the
+  most common are shown with your score and the book moves you could have played,
+  ordered by how many named lines go through them. Games where the opponent left
+  book first are counted separately, and so are games where the book simply ran out.
+
+**Engine checks (optional, off by default).** Tick *Check with the Lichess cloud
+engine* to compare your move with the engine at each theory exit and move-choice leak.
+Where the engine's best move is at least half a pawn better (or your move isn't in its
+top 5), you can drill the engine's move instead. This uses the free
+[Lichess cloud-eval API](https://lichess.org/api#tag/Analysis/operation/apiCloudEval)
+straight from the browser. It allows CORS and covers common opening positions well,
+and it costs us nothing to run. Requests go one at a time, pause for a minute after a
+429, and are cached in this browser's localStorage. Any failure just shows no
+evaluation. It is off by default because it sends positions to lichess.org. We chose
+not to ship Stockfish WASM: it is GPL-3.0, so bundling it would put GPL obligations
+on the app (offering the engine's source to everyone who gets it), and it would cost
+every phone a large download and CPU time. Cloud eval gives the same answers for
+opening positions without either cost.
+
+### Trainer
+
+**The repertoire** (`lib/openings/repertoire.ts`) is built from all your standard
+games. The trainer's filters are not used. Positions are merged by key. A position
+becomes a card when:
+
+- it's your move, within the first 16 plies
+- you've reached it in at least 3 games
+- you can reach it by playing your repertoire moves against moves your opponents have
+  actually played
+
+A card's move is the move you've played most there, with games from the last year
+counting double. You can adopt any other move you've played (or the report's
+suggestion, or the engine's move). That resets the card's progress. The repertoire
+list marks a move that clearly scores better, using the move-choice leak rule.
+
+**A line** starts from the initial position. The opponent's reply is drawn at random,
+weighted by how often your opponents played each move against you. Only replies that
+lead on to a position that needs practice are drawn: one that is due in **Review**,
+or one of the worst positions in **Fix my leaks**. When none is left down the line,
+the line ends. You play your moves by click-click or drag. A wrong move is marked red
+and the expected move is shown with an arrow. You then play it, or press **Show me**,
+to go on.
+
+**Scheduling** (`lib/openings/srs.ts`) is Leitner boxes. A correct answer on a due
+position moves it up a box, due again in 1, 3, 7, 14, 30, 60, then 120 days. A miss
+sends it back to box 0 and it is due again in 2 minutes, so it returns in the same
+session. A correct answer on a position that isn't due yet (one you pass on the way to
+another) is counted but doesn't move it up. New positions are due at once. When
+nothing is due, **Practise anyway** plays lines over all your positions.
+
+**Fix my leaks** drills the 10 positions with the highest leak score:
+your misses in the trainer, plus the points your games lose after your move there
+(games × how far your shrunk score falls below your average for that colour, ÷ 3),
+plus 1 if a clearly better move exists that you haven't adopted.
+
+**Progress** is saved through `window.storage`, so in cloud mode it syncs per signed-in
+user. The keys are:
+
+| Key | Holds |
+|---|---|
+| `op-filters-v1` | The report and explorer filters |
+| `op-cards-white-v1`, `op-cards-black-v1` | Review state for each position: box, due time, times seen, misses |
+| `op-rep-white-v1`, `op-rep-black-v1` | Moves you've adopted in place of your usual move |
+| `op-engine-v1` | Whether engine checks are on |
+
+The engine cache (`op-eval-cache-v1`) is kept in this browser's localStorage only.
+
+### The board component
+
+`components/board` holds a controlled board that later features (analysis, puzzles)
+can reuse:
+
+```tsx
+import { Chessboard } from "@/components/board";
+
+<Chessboard
+  fen={fen}                       // always shows this position
+  orientation="black"             // default "white"
+  interactive="black"             // true = side to move, a colour, or false (default)
+  onMove={(m) => setFen(m.fen)}   // { from, to, promotion?, san, uci, fen } for each legal move
+  lastMove={{ from: "e2", to: "e4" }}
+  arrows={[{ from: "g1", to: "f3", tone: "good", weight: 0.8 }]}   // tones: info, good, bad, warn
+  markers={[{ square: "d5", tone: "bad" }]}
+  coordinates                     // default true
+  label="Analysis board"          // accessible name, default "Chessboard"
+/>
+```
+
+- chess.js supplies legal moves. Moves work by click-click, drag on mouse, touch or pen
+  (pointer events), or the keyboard: arrow keys move between squares, and Enter or
+  Space picks a piece up and puts it down.
+- Promotion opens a piece picker. The legal targets of the selected piece are marked,
+  a king in check is highlighted, and a piece slides in for the last move unless
+  reduced motion is set.
+- Test hooks: the board is `role="group"` with `data-fen`, `data-orientation` and
+  `data-turn`. Each square has `data-square` and, when occupied, `data-piece` (`wP`,
+  `bK`, ...). Squares can also carry `data-selected`, `data-target`, `data-last`,
+  `data-marker` and `data-check`. Arrows are `<g data-arrow="e2e4">`.
+- The pieces in `components/board/pieces.tsx` were drawn for this project. There are
+  no third-party assets, so they share the app's licence.
+
+### Third-party data and code
+
+| What | Licence |
+|---|---|
+| Lichess chess-openings dataset (`lib/openings/book-data.json`) | CC0 |
+| chess.js | BSD-2-Clause |
+| Lichess cloud-eval API (optional, called from the browser) | Lichess API terms. No engine code is shipped |
 
 ## Your Chess.com games
 

@@ -210,24 +210,6 @@ export default function Trainer() {
         </div>
       </div>
 
-      <div className={s.tiles}>
-        <div className={s.tile}>
-          <div className={s.tileLabel}>Positions</div>
-          <div className={s.tileValue}>{rep.cards.size}</div>
-          <div className={s.tileNote}>{`${counts.learned} learned`}</div>
-        </div>
-        <div className={s.tile}>
-          <div className={s.tileLabel}>Due now</div>
-          <div className={s.tileValue} data-testid="due-count">{counts.due + counts.fresh}</div>
-          <div className={s.tileNote}>{`${counts.fresh} new`}</div>
-        </div>
-        <div className={s.tile}>
-          <div className={s.tileLabel}>Leaks</div>
-          <div className={s.tileValue}>{leaks.length}</div>
-          <div className={s.tileNote}>positions to fix</div>
-        </div>
-      </div>
-
       <div className={s.trainer} data-testid="trainer" data-phase={line?.phase ?? "idle"} data-expected-move={yourTurn && card ? card.move.uci : undefined}>
         <div className={s.boardCol}>
           <Chessboard
@@ -255,6 +237,23 @@ export default function Trainer() {
             onShowMe={showMe}
           />
           {line && line.sans.length > 0 && <p className={`${s.crumbs} ${s.muted}`} aria-label="Moves so far">{formatLine(line.sans)}</p>}
+          <div className={s.tiles} style={{ marginTop: 14 }}>
+            <div className={s.tile}>
+              <div className={s.tileLabel}>Positions</div>
+              <div className={s.tileValue}>{rep.cards.size}</div>
+              <div className={s.tileNote}>{`${counts.learned} learned`}</div>
+            </div>
+            <div className={s.tile}>
+              <div className={s.tileLabel}>Due now</div>
+              <div className={s.tileValue} data-testid="due-count">{counts.due + counts.fresh}</div>
+              <div className={s.tileNote}>{`${counts.fresh} new`}</div>
+            </div>
+            <div className={s.tile}>
+              <div className={s.tileLabel}>Leaks</div>
+              <div className={s.tileValue}>{leaks.length}</div>
+              <div className={s.tileNote}>to fix</div>
+            </div>
+          </div>
           {mode === "leaks" && leaks.length > 0 && (
             <section className={s.panel} aria-labelledby="leak-list" style={{ marginTop: 14 }}>
               <h2 id="leak-list">Positions to fix</h2>
@@ -404,7 +403,8 @@ function RepertoireList({ rep, states, clock, onAdopt }: { rep: Repertoire; stat
               {(c.played.length > 1 || c.adopted) && (
                 <div className={s.alts}>
                   {c.played
-                    .filter((m) => m.uci !== c.move.uci)
+                    // One-off moves are noise; keep the suggestion and the usual move whatever their count.
+                    .filter((m) => m.uci !== c.move.uci && (m.stats.n >= 2 || m === c.suggestion || m === c.usual))
                     .slice(0, 4)
                     .map((m) => (
                       <button

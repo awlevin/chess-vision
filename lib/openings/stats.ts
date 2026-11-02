@@ -46,6 +46,8 @@ export function betterChoice<T extends { stats: Stats }>(moves: T[], minGames = 
   const prior = score(total);
   const [usual, ...others] = ranked;
   const better = others.reduce((a, m) => (shrunkScore(m.stats, prior) > shrunkScore(a.stats, prior) ? m : a));
+  // With a tie there is no "usual" move to call out.
+  if (better.stats.n >= usual.stats.n) return null;
   if (score(better.stats) - score(usual.stats) < 0.15) return null;
   if (shrunkScore(better.stats, prior) - shrunkScore(usual.stats, prior) < 0.06) return null;
   const worst = others.every((m) => score(m.stats) > score(usual.stats));

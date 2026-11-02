@@ -21,7 +21,8 @@ export interface Classified {
   namedPly: number;
   /** Index of the first move that left known theory, or null if it never did (within the moves read). */
   exitMove: number | null;
-  exitBy: "you" | "opponent" | null;
+  /** Who left first; "book-ended" when the last move was the end of every named line through it. */
+  exitBy: "you" | "opponent" | "book-ended" | null;
 }
 
 const classified = new WeakMap<ParsedGame, Classified>();
@@ -40,7 +41,7 @@ export function classify(g: ParsedGame, book: Book): Classified {
     named: namedPly > 0 ? book.named.get(g.keys[namedPly])! : null,
     namedPly,
     exitMove,
-    exitBy: exitMove === null ? null : mine(exitMove) ? "you" : "opponent",
+    exitBy: exitMove === null ? null : !book.continues.has(g.keys[exitMove]) ? "book-ended" : mine(exitMove) ? "you" : "opponent",
   };
   classified.set(g, out);
   return out;
@@ -100,7 +101,7 @@ export interface ColorReport {
   families: OpeningRow[];
   leaks: Leak[];
   exits: TheoryExit[];
-  theory: { youLeft: number; opponentLeft: number; stayed: number; avgExitMove: number | null };
+  theory: { youLeft: number; opponentLeft: number; bookEnded: number; stayed: number; avgExitMove: number | null };
 }
 
 export interface Report {
@@ -175,7 +176,7 @@ function colorReport(all: ParsedGame[], book: Book, color: Color): ColorReport {
 
   // Named openings, by family then variation.
   const families = new Map<string, RowBuilder>();
-  const theory = { youLeft: 0, opponentLeft: 0, stayed: 0, avgExitMove: null as number | null };
+  const theory = { youLeft: 0, opponentLeft: 0, bookEnded: 0, stayed: 0, avgExitMove: null as number | null };
   let exitMoveSum = 0;
   const exits = new Map<string, { key: string; ply: number; san: string; uci: string; games: ParsedGame[]; paths: Counter<string>; opening: BookEntry | null }>();
 
@@ -211,6 +212,7 @@ function colorReport(all: ParsedGame[], book: Book, color: Color): ColorReport {
       e.games.push(g);
       e.paths.add(g.sans.slice(0, m).join(" "));
     } else if (c.exitBy === "opponent") theory.opponentLeft++;
+    else if (c.exitBy === "book-ended") theory.bookEnded++;
     else theory.stayed++;
   }
   if (theory.youLeft) theory.avgExitMove = exitMoveSum / theory.youLeft;

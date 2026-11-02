@@ -112,6 +112,56 @@ test("the trainer grades your moves and remembers progress", async ({ page }) =>
   await expect(due).not.toHaveText(String(before));
 });
 
+test("as Black the opponent moves first, and Fix my leaks drills the weak spots", async ({ page }) => {
+  await linkFixture(page);
+  await page.goto("/openings/train?color=black&mode=leaks");
+  const trainer = page.getByTestId("trainer");
+  await expect(page.getByRole("group", { name: "Mode" }).getByRole("button", { name: "Fix my leaks" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Start fixing leaks" }).click();
+  await expect(trainer).toHaveAttribute("data-phase", "you");
+  const board = page.getByRole("group", { name: "Training board" });
+  await expect(board).toHaveAttribute("data-orientation", "black");
+  await expect(board).toHaveAttribute("data-turn", "black");
+  await play(page, "Training board", (await trainer.getAttribute("data-expected-move"))!);
+  await expect(page.getByRole("status").filter({ hasText: /Correct|Line complete|Your move/ })).toBeVisible();
+});
+
+test("engine checks are opt-in and use the Lichess cloud eval", async ({ page }) => {
+  const asked: string[] = [];
+  await page.context().route("https://lichess.org/api/cloud-eval**", (route) => {
+    asked.push(new URL(route.request().url()).searchParams.get("fen")!);
+    // Pretend the engine always prefers a3: never what the player played.
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ depth: 30, pvs: [{ moves: "a2a3 a7a6", cp: 35 }, { moves: "a7a6 a2a3", cp: -35 }] }),
+    });
+  });
+  await linkFixture(page);
+  await page.goto("/openings");
+  await expect(page.getByRole("heading", { name: "Where you leave theory" })).toBeVisible();
+  expect(asked).toHaveLength(0);
+
+  await page.getByRole("checkbox", { name: "Check with the Lichess cloud engine" }).check();
+  await expect(page.getByText(/Engine \(depth 30\)/).first()).toBeVisible();
+  expect(asked.length).toBeGreaterThan(0);
+});
+
+test("the board handles keyboard moves", async ({ page }) => {
+  await linkFixture(page);
+  await page.goto("/openings/explorer");
+  const board = page.getByRole("group", { name: "Explorer board" });
+  await board.locator('[data-square="e2"]').focus();
+  await page.keyboard.press("Enter");
+  await expect(board.locator('[data-square="e2"]')).toHaveAttribute("data-selected", "true");
+  await expect(board.locator('[data-square="e4"]')).toHaveAttribute("data-target", "true");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await expect(board).toHaveAttribute("data-fen", /^rnbqkbnr\/pppppppp\/8\/8\/4P3\//);
+});
+
 test("the board fits a 360px phone and can be dragged", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await linkFixture(page);

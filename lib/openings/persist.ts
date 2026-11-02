@@ -11,6 +11,7 @@ import { installStorage } from "@/lib/storage-client";
 
 export const STORAGE_KEYS = {
   filters: "op-filters-v1",
+  engine: "op-engine-v1",
   cards: (color: "white" | "black") => `op-cards-${color}-v1`,
   repertoire: (color: "white" | "black") => `op-rep-${color}-v1`,
 } as const;
